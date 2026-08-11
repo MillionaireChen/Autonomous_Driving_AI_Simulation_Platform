@@ -6,10 +6,15 @@
 # jobs, so the server always runs off-screen and always pinned to one card
 # (spec section 4). It must never be allowed to see all four.
 #
+# Several instances can run side by side, each with its own port, GPU, log and
+# pid file. CARLA also binds port+1 and port+2 for streaming, so instances must
+# be at least three apart - 2000 and 2010 rather than 2000 and 2001.
+#
 # Usage:
 #   ./scripts/carla_server.sh start
-#   ./scripts/carla_server.sh status
-#   ./scripts/carla_server.sh stop
+#   ./scripts/carla_server.sh start 2010 0     # second instance, same GPU
+#   ./scripts/carla_server.sh status 2010
+#   ./scripts/carla_server.sh stop 2010
 
 set -euo pipefail
 
@@ -23,13 +28,14 @@ fi
 CARLA_VERSION="${CARLA_VERSION:-0.9.16}"
 CARLA_ROOT="${CARLA_ROOT:-$HOME/carla/CARLA_${CARLA_VERSION}}"
 CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
-CARLA_RPC_PORT="${CARLA_RPC_PORT:-2000}"
-CARLA_GPU="${CARLA_GPU:-0}"
+# Positional overrides win, so one script drives every instance.
+CARLA_RPC_PORT="${2:-${CARLA_RPC_PORT:-2000}}"
+CARLA_GPU="${3:-${CARLA_GPU:-0}}"
 CARLA_QUALITY="${CARLA_QUALITY:-Epic}"
 
 LOG_DIR="$REPO_ROOT/logs"
-PID_FILE="$LOG_DIR/carla_server.pid"
-LOG_FILE="$LOG_DIR/carla_server.log"
+PID_FILE="$LOG_DIR/carla_${CARLA_RPC_PORT}.pid"
+LOG_FILE="$LOG_DIR/carla_${CARLA_RPC_PORT}.log"
 STARTUP_TIMEOUT="${CARLA_STARTUP_TIMEOUT:-180}"
 
 log() { printf '[carla-server] %s\n' "$*"; }

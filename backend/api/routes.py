@@ -286,7 +286,7 @@ def create_arena(payload: ArenaIn, request: Request,
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
 
-    manager(request).start_sequence(db, experiments)
+    manager(request).start_many(db, experiments)
     return {
         "scenario_id": payload.scenario_id,
         "seed": payload.seed,
@@ -333,3 +333,13 @@ def compare(a: str, b: str, db: Session = Depends(get_session)):
         "a": left,
         "b": right,
     }
+
+
+@router.get("/simulators", tags=["meta"])
+def simulators(request: Request):
+    """The CARLA servers experiments can be placed on, and which are busy."""
+    pool = manager(request).pool
+    if pool is None:
+        return {"simulators": [], "size": 0, "available": 0}
+    return {"simulators": pool.status(), "size": pool.size,
+            "available": pool.available}

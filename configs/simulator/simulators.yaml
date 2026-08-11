@@ -1,0 +1,18 @@
+# The pool of CARLA servers an experiment can be placed on (spec section 62).
+#
+# Each entry is one server process. An experiment leases a free one for the
+# length of its episode; with two entries, two experiments run at once.
+#
+# Note the GPUs: spec section 62 puts the second instance on GPU 2, but on this
+# machine GPUs 1-3 are running other people's jobs and GPU 0 is the only free
+# card. Two CARLA servers on one card cost about 5 GB each out of 97 GB, so
+# they fit comfortably - they share rendering throughput rather than memory.
+simulators:
+  - name: carla-0
+    host: 127.0.0.1
+    port: 2000
+    gpu: 0
+  - name: carla-1
+    host: 127.0.0.1
+    port: 2010
+    gpu: 0

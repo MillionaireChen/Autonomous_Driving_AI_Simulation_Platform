@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 12 of 14 complete - Model Arena.**
+**Phase 13 of 14 complete - parallel simulation.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -48,8 +48,10 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   waypoint-output models can drive. See [docs/PHASE11.md](docs/PHASE11.md).
 - **Phase 12** - Model Arena: two models, one scenario, one seed, side by side.
   See [docs/PHASE12.md](docs/PHASE12.md).
+- **Phase 13** - a pool of CARLA servers, so two episodes run at once without
+  affecting each other. See [docs/PHASE13.md](docs/PHASE13.md).
 
-Parallel simulation and batch evaluation land in later phases. Nothing in
+Batch evaluation lands in the final phase. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ![dashboard](docs/images/dashboard-result.png)
@@ -375,11 +377,36 @@ answers in 2.3 ms, the neural policy in 15-17 ms. Both are far inside the
 </details>
 
 <details>
+<summary><b>Phase 13 - two episodes at once</b></summary>
+
+```
+t+4s   A=STARTING   B=STARTING   pool=2/2 free
+t+8s   A=RUNNING    B=RUNNING    pool=0/2 free
+t+36s  A=COMPLETED  B=COMPLETED  pool=2/2 free
+
+EXP-0014 pid     simulator=carla-0
+EXP-0015 dummy   simulator=carla-1
+```
+
+Parallel execution does not change the results - the same match run
+sequentially and then in parallel:
+
+| | sequential | parallel |
+|---|---|---|
+| pid score | 85.62 | **85.62** |
+| pid distance | 359.21 m | **359.21 m** |
+| pid route | 58.10% | **58.10%** |
+
+Identical to the last digit: sharing a GPU between two renderers has not
+perturbed the physics.
+</details>
+
+<details>
 <summary><b>Test suite</b></summary>
 
 ```
 $ make test
-136 passed in 3.31s
+147 passed in 2.36s
 ```
 
 No CARLA required - the suite covers the safety envelope, the gRPC protocol

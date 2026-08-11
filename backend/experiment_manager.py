@@ -16,6 +16,8 @@ HTTP request that starts it must return immediately.
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import subprocess
 import threading
 from datetime import datetime, timezone
@@ -27,6 +29,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.database.models import (
     Episode, Event, Experiment, Frame, Metric, Model, Scenario,
 )
+from simulator.pool import SimulatorPool
 from simulator.stream import Broadcaster
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -60,8 +63,12 @@ def git_commit() -> str:
 
 
 class ExperimentManager:
-    def __init__(self, sessions: sessionmaker, output_root: Optional[Path] = None):
+    def __init__(self, sessions: sessionmaker, output_root: Optional[Path] = None,
+                 pool: Optional[SimulatorPool] = None):
         self.sessions = sessions
+        #: Experiments lease a CARLA server from here. One entry means one
+        #: episode at a time; two means two at once (spec section 62).
+        self.pool = pool
         self.output_root = output_root or (REPO_ROOT / "output" / "experiments")
         self._threads: dict[str, threading.Thread] = {}
         self._stop_flags: dict[str, threading.Event] = {}
@@ -128,33 +135,16 @@ class ExperimentManager:
             self.streams[experiment.id] = Broadcaster()
         thread.start()
 
-    def start_sequence(self, db: Session, experiments: list[Experiment]) -> None:
-        """Run several experiments back to back on one worker thread.
+    def start_many(self, db: Session, experiments: list[Experiment]) -> None:
+        """Start several experiments at once.
 
-        Sequential, not parallel, and deliberately: there is one CARLA server,
-        and two episodes sharing it would interleave their world ticks and
-        corrupt both. Parallel arena runs need the second simulator from
-        Phase 13.
+        Each gets its own thread and leases a CARLA server from the pool, so
+        how many actually run in parallel is decided by the size of the pool
+        rather than by this method. With one simulator they queue; with two
+        they overlap. No branch here has to know which.
         """
         for experiment in experiments:
-            self.set_status(db, experiment, "STARTING")
-
-        ids = [e.id for e in experiments]
-        flags = {i: threading.Event() for i in ids}
-        thread = threading.Thread(
-            target=self._run_sequence, args=(ids, flags),
-            name=f"arena-{'-'.join(ids)}", daemon=True,
-        )
-        with self._lock:
-            for i in ids:
-                self._threads[i] = thread
-                self._stop_flags[i] = flags[i]
-                self.streams[i] = Broadcaster()
-        thread.start()
-
-    def _run_sequence(self, ids: list[str], flags: dict[str, threading.Event]) -> None:
-        for experiment_id in ids:
-            self._run(experiment_id, flags[experiment_id])
+            self.start(db, experiment)
 
     def stop(self, db: Session, experiment: Experiment) -> None:
         """Ask a running experiment to stop at the next tick."""
@@ -205,21 +195,34 @@ class ExperimentManager:
                 endpoint=model.endpoint, timeout_ms=model.timeout_ms
             )
 
-            self.set_status(db, experiment, "RUNNING")
+            # Lease a simulator for the length of the episode. Blocks while
+            # every server is busy, which is the queue from spec section 62.
+            lease = (self.pool.lease() if self.pool is not None
+                     else contextlib.nullcontext(None))
+            with lease as endpoint:
+                if endpoint is not None:
+                    sim_config = copy.deepcopy(sim_config)
+                    sim_config["server"]["host"] = endpoint.host
+                    sim_config["server"]["port"] = endpoint.port
+                    versions = dict(experiment.versions or {})
+                    versions["simulator"] = endpoint.name
+                    experiment.versions = versions
 
-            worker = SimulationWorker(
-                sim_config, camera_config, ego_config, episode_config,
-                evaluation_config=evaluation_config,
-            )
-            output_dir = self.output_root / experiment.id
-            stream = self.streams.get(experiment_id)
-            result = worker.run_episode(
-                policy, episode_id=experiment.id,
-                output_dir=output_dir, scenario=scenario,
-                stop_flag=stop_flag,
-                on_tick=stream.publish if stream is not None else None,
-                record_frames=bool(experiment.record_frames),
-            )
+                self.set_status(db, experiment, "RUNNING")
+
+                worker = SimulationWorker(
+                    sim_config, camera_config, ego_config, episode_config,
+                    evaluation_config=evaluation_config,
+                )
+                output_dir = self.output_root / experiment.id
+                stream = self.streams.get(experiment_id)
+                result = worker.run_episode(
+                    policy, episode_id=experiment.id,
+                    output_dir=output_dir, scenario=scenario,
+                    stop_flag=stop_flag,
+                    on_tick=stream.publish if stream is not None else None,
+                    record_frames=bool(experiment.record_frames),
+                )
 
             self._persist(db, experiment, result, output_dir)
 

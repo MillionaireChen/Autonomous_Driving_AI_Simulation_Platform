@@ -24,6 +24,8 @@ from backend.api.websocket import router as ws_router  # noqa: E402
 from backend.database.models import Model, Scenario  # noqa: E402
 from backend.database.session import migrate, session_factory  # noqa: E402
 from backend.experiment_manager import ExperimentManager  # noqa: E402
+from simulator import config as simcfg  # noqa: E402
+from simulator.pool import SimulatorPool  # noqa: E402
 
 SCENARIO_DIR = REPO_ROOT / "scenarios"
 MODELS_YAML = REPO_ROOT / "configs" / "models.yaml"
@@ -70,8 +72,10 @@ async def lifespan(app: FastAPI):
     action = migrate()
     models, scenarios = sync_registries()
     print(f"database {action}", flush=True)
-    app.state.manager = ExperimentManager(session_factory())
+    pool = SimulatorPool.from_config(simcfg.load_yaml("simulator/simulators.yaml"))
+    app.state.manager = ExperimentManager(session_factory(), pool=pool)
     print(f"registry synced: {models} model(s), {scenarios} scenario(s)", flush=True)
+    print(f"simulator pool: {', '.join(str(e) for e in pool.endpoints)}", flush=True)
     yield
 
 
