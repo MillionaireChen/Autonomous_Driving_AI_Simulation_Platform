@@ -31,6 +31,21 @@ class Pose:
 
 
 @dataclass
+class LeadVehicle:
+    """Ground truth about the closest vehicle ahead, in the ego's lane.
+
+    This is privileged information: a camera-only model has to infer it, and
+    must not be handed it. It exists for rule-based experts and for generating
+    training data, which is how expert autopilots work in the CARLA literature.
+    A policy only receives it if it declares "lead_vehicle" in its
+    required_sensors, so taking it is a visible, deliberate choice.
+    """
+
+    gap_m: float
+    speed_mps: float
+
+
+@dataclass
 class Observation:
     """What the world looks like at one timestep (spec section 11).
 
@@ -46,6 +61,11 @@ class Observation:
     ego_pose: Pose
     rgb_front: Optional[np.ndarray] = None
     route_command: Optional[str] = None
+    #: Upcoming route points in world coordinates, nearest first. Every real
+    #: driving stack is given a route; inferring where to go from pixels alone
+    #: is a different problem from driving.
+    route_waypoints: list[tuple[float, float]] = field(default_factory=list)
+    lead_vehicle: Optional[LeadVehicle] = None
 
 
 @dataclass

@@ -23,12 +23,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from models.dummy.policy import DummyAgent  # noqa: E402
+from models.pid.policy import PIDAgent  # noqa: E402
 from simulator import config as cfg  # noqa: E402
 from simulator.policy import DrivingPolicy  # noqa: E402
 from simulator.worker import SimulationWorker  # noqa: E402
 
 IN_PROCESS_POLICIES: dict[str, type[DrivingPolicy]] = {
     "dummy": DummyAgent,
+    "pid": PIDAgent,
 }
 
 

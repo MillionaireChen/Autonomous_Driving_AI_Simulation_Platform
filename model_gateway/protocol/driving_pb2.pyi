@@ -94,8 +94,24 @@ class Image(_message.Message):
     data: bytes
     def __init__(self, width: _Optional[int] = ..., height: _Optional[int] = ..., encoding: _Optional[str] = ..., data: _Optional[bytes] = ...) -> None: ...
 
+class Waypoint(_message.Message):
+    __slots__ = ("x", "y")
+    X_FIELD_NUMBER: _ClassVar[int]
+    Y_FIELD_NUMBER: _ClassVar[int]
+    x: float
+    y: float
+    def __init__(self, x: _Optional[float] = ..., y: _Optional[float] = ...) -> None: ...
+
+class LeadVehicle(_message.Message):
+    __slots__ = ("gap_m", "speed_mps")
+    GAP_M_FIELD_NUMBER: _ClassVar[int]
+    SPEED_MPS_FIELD_NUMBER: _ClassVar[int]
+    gap_m: float
+    speed_mps: float
+    def __init__(self, gap_m: _Optional[float] = ..., speed_mps: _Optional[float] = ...) -> None: ...
+
 class Observation(_message.Message):
-    __slots__ = ("frame_id", "timestamp", "speed_mps", "acceleration_mps2", "steering_angle", "ego_pose", "rgb_front", "route_command")
+    __slots__ = ("frame_id", "timestamp", "speed_mps", "acceleration_mps2", "steering_angle", "ego_pose", "rgb_front", "route_command", "route_waypoints", "lead_vehicle")
     FRAME_ID_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     SPEED_MPS_FIELD_NUMBER: _ClassVar[int]
@@ -104,6 +120,8 @@ class Observation(_message.Message):
     EGO_POSE_FIELD_NUMBER: _ClassVar[int]
     RGB_FRONT_FIELD_NUMBER: _ClassVar[int]
     ROUTE_COMMAND_FIELD_NUMBER: _ClassVar[int]
+    ROUTE_WAYPOINTS_FIELD_NUMBER: _ClassVar[int]
+    LEAD_VEHICLE_FIELD_NUMBER: _ClassVar[int]
     frame_id: int
     timestamp: float
     speed_mps: float
@@ -112,7 +130,9 @@ class Observation(_message.Message):
     ego_pose: Pose
     rgb_front: Image
     route_command: str
-    def __init__(self, frame_id: _Optional[int] = ..., timestamp: _Optional[float] = ..., speed_mps: _Optional[float] = ..., acceleration_mps2: _Optional[float] = ..., steering_angle: _Optional[float] = ..., ego_pose: _Optional[_Union[Pose, _Mapping]] = ..., rgb_front: _Optional[_Union[Image, _Mapping]] = ..., route_command: _Optional[str] = ...) -> None: ...
+    route_waypoints: _containers.RepeatedCompositeFieldContainer[Waypoint]
+    lead_vehicle: LeadVehicle
+    def __init__(self, frame_id: _Optional[int] = ..., timestamp: _Optional[float] = ..., speed_mps: _Optional[float] = ..., acceleration_mps2: _Optional[float] = ..., steering_angle: _Optional[float] = ..., ego_pose: _Optional[_Union[Pose, _Mapping]] = ..., rgb_front: _Optional[_Union[Image, _Mapping]] = ..., route_command: _Optional[str] = ..., route_waypoints: _Optional[_Iterable[_Union[Waypoint, _Mapping]]] = ..., lead_vehicle: _Optional[_Union[LeadVehicle, _Mapping]] = ...) -> None: ...
 
 class VehicleControl(_message.Message):
     __slots__ = ("throttle", "steer", "brake", "hand_brake")

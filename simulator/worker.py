@@ -44,6 +44,7 @@ from simulator.scenario import (
 from simulator.sensors import CameraSensor, CollisionSensor, LaneInvasionSensor
 from simulator.types import (
     EpisodeResult,
+    LeadVehicle,
     Observation,
     VehicleControlAction,
     percentile,
@@ -82,18 +83,44 @@ class SimulationWorker:
         frame_id: int,
         sim_time: float,
         route_command: Optional[str],
+        route=None,
+        others: Optional[list] = None,
     ) -> Observation:
         control = vehicle.get_control()
+        pose = ego_mod.pose_of(vehicle)
         return Observation(
             frame_id=frame_id,
             timestamp=sim_time,
             speed_mps=ego_mod.speed_of(vehicle),
             acceleration_mps2=ego_mod.longitudinal_acceleration(vehicle),
             steering_angle=control.steer,
-            ego_pose=ego_mod.pose_of(vehicle),
+            ego_pose=pose,
             rgb_front=camera.poll() if camera else None,
             route_command=route_command,
+            route_waypoints=route.upcoming(pose.x, pose.y) if route else [],
+            lead_vehicle=self._lead_vehicle(vehicle, others or []),
         )
+
+    @staticmethod
+    def _lead_vehicle(ego: carla.Vehicle, others: list) -> Optional[LeadVehicle]:
+        """Closest vehicle ahead inside the ego's lane corridor, if any.
+
+        Ground truth, handed only to policies that ask for it. Same corridor
+        test the TTC metric uses, so a model and the score agree about what
+        counts as "in front".
+        """
+        best: Optional[LeadVehicle] = None
+        for other in others:
+            if other is None or not other.is_alive:
+                continue
+            gap = longitudinal_gap(ego, other)
+            if gap <= 0.0 or abs(lateral_offset(ego, other)) > 2.0:
+                continue
+            if best is None or gap < best.gap_m:
+                best = LeadVehicle(
+                    gap_m=gap, speed_mps=ego_mod.forward_speed(other, ego)
+                )
+        return best
 
     # -- time to collision -------------------------------------------------
     def _minimum_ttc(
@@ -247,6 +274,9 @@ class SimulationWorker:
                 terminate_on_collision = bool(
                     scenario.termination.get("collision", True)
                 ) if scenario else False
+                terminate_on_route = bool(
+                    scenario.termination.get("route_completed", False)
+                ) if scenario else False
 
                 for tick in range(max_ticks):
                     sim_time = tick * self.fixed_delta
@@ -264,7 +294,11 @@ class SimulationWorker:
                             runner.log_event(sim_time, "EMERGENCY_STOP", {})
                         break
 
-                    obs = self._observe(vehicle, camera, tick, sim_time, route_command)
+                    obs = self._observe(
+                        vehicle, camera, tick, sim_time, route_command,
+                        route=route,
+                        others=runner.actors() if runner is not None else [],
+                    )
 
                     # Ask the policy only at its own rate; reuse in between.
                     if tick % self.inference_interval == 0:
@@ -387,6 +421,14 @@ class SimulationWorker:
                         on_tick(message)
 
                     # -- termination (spec section 24) ----------------------
+                    # Finishing the route is success, not something to drive
+                    # past: beyond it the controller has no steering target.
+                    if terminate_on_route and route is not None \
+                            and row.get("route_pct", 0.0) >= 99.5:
+                        result.termination_reason = "ROUTE_COMPLETED"
+                        if runner is not None:
+                            runner.log_event(sim_time, "ROUTE_COMPLETED", {})
+                        break
                     if collision.count and terminate_on_collision:
                         result.termination_reason = "COLLISION"
                         if runner is not None:

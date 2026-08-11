@@ -51,6 +51,22 @@ class Route:
                 best_index, best_distance = index, distance
         return self.cumulative[best_index]
 
+    def upcoming(self, x: float, y: float, count: int = 20,
+                 stride: int = 2) -> list[tuple[float, float]]:
+        """The next `count` route points ahead of (x, y), nearest first.
+
+        Strided so the horizon covers useful distance without shipping every
+        point: at a 2 m step, stride 2 and count 20 is 80 m of road.
+        """
+        if not self.points:
+            return []
+        best_index, best_distance = 0, float("inf")
+        for index, (px, py) in enumerate(self.points):
+            d = (px - x) ** 2 + (py - y) ** 2
+            if d < best_distance:
+                best_index, best_distance = index, d
+        return self.points[best_index + 1: best_index + 1 + count * stride: stride]
+
     def completion_percent(self, x: float, y: float) -> float:
         if self.length_m <= 0.0:
             return 0.0

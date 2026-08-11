@@ -83,6 +83,18 @@ message Image {
   bytes data = 4;
 }
 
+message Waypoint {
+  double x = 1;
+  double y = 2;
+}
+
+// Ground truth about the closest vehicle ahead. Privileged: only sent to a
+// model that declares "lead_vehicle" in required_sensors.
+message LeadVehicle {
+  double gap_m = 1;
+  double speed_mps = 2;
+}
+
 message Observation {
   int64 frame_id = 1;
   double timestamp = 2;
@@ -92,6 +104,10 @@ message Observation {
   Pose ego_pose = 6;
   Image rgb_front = 7;
   string route_command = 8;
+  // Upcoming route points, nearest first. Sent when the model declares
+  // "route": every real driving stack is given a route.
+  repeated Waypoint route_waypoints = 9;
+  LeadVehicle lead_vehicle = 10;
 }
 
 message VehicleControl {

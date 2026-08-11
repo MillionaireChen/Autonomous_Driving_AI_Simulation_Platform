@@ -72,6 +72,10 @@ class EvaluationEngine:
         self.warning_below = float(ttc["warning_below_s"])
         self.dangerous_below = float(ttc["dangerous_below_s"])
         self.hard_brake_threshold = float(config["comfort"]["hard_brake_mps2"])
+        self.hard_brake_release = float(
+            config["comfort"].get("hard_brake_release_mps2",
+                                  self.hard_brake_threshold / 2.0)
+        )
 
         self.metrics = EpisodeMetrics()
         self._speed_sum = 0.0
@@ -105,13 +109,17 @@ class EvaluationEngine:
             m.max_jerk_mps3 = max(m.max_jerk_mps3, jerk)
         self._previous_accel = longitudinal_accel
 
-        # Count a hard brake once per braking event, not once per tick.
-        if longitudinal_accel <= self.hard_brake_threshold:
-            if not self._braking:
-                m.hard_brake_count += 1
-                self._braking = True
-        else:
-            self._braking = False
+        # Count a hard brake once per braking event, not once per tick, and
+        # use a Schmitt trigger rather than a bare threshold: real deceleration
+        # wanders either side of the limit during one manoeuvre, and a plain
+        # edge detector turns a single brake into a handful. Measured on one
+        # episode: 9 counted, 2 actually performed.
+        if self._braking:
+            if longitudinal_accel > self.hard_brake_release:
+                self._braking = False
+        elif longitudinal_accel <= self.hard_brake_threshold:
+            m.hard_brake_count += 1
+            self._braking = True
 
         if ttc_s is not None and math.isfinite(ttc_s):
             if m.minimum_ttc_s is None or ttc_s < m.minimum_ttc_s:

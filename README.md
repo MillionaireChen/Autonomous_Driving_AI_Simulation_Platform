@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 9 of 14 complete - Replay.**
+**Phase 10 of 14 complete - PID baseline.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -40,6 +40,9 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   See [docs/PHASE8.md](docs/PHASE8.md).
 - **Phase 9** - frame recording, Alembic migrations and a replay page with
   play/pause/scrub. See [docs/PHASE9.md](docs/PHASE9.md).
+- **Phase 10** - a baseline that actually drives: pure pursuit plus IDM
+  car-following, which passes the scenario the dummy fails.
+  See [docs/PHASE10.md](docs/PHASE10.md).
 
 Learned models and the model arena land in later phases. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
@@ -255,11 +258,50 @@ existing experiments preserved: 8
 </details>
 
 <details>
+<summary><b>Phase 10 - same scenario, same seed, two models</b></summary>
+
+| | result | score | collisions | lane invasions | min TTC | hard brakes | route |
+|---|---|---|---|---|---|---|---|
+| DummyAgent | **FAIL** | 0.0 | 1 | 14 | 17.97 s | 0 | 40.6% |
+| PIDAgent | **PASS** | 85.6 | 0 | 0 | 7.06 s | 2 | 58.1% |
+
+```
+$ uv run python scripts/run_episode.py --model pid --scenario highway_cut_in
+model requires sensors: route, lead_vehicle, speed
+
+cut-in triggered    YES at 10.10s
+collisions          0
+distance            359.2 m
+speed               avg 9.0 m/s, max 15.0 m/s
+inference latency   p50 0.934 ms, p95 1.958 ms
+minimum TTC         7.06 s
+lane invasions      0
+RESULT              PASS   score 85.6 / 100
+```
+
+The braking response to the cut-in, from the run where it was sharpest:
+
+```
+first brake at t=13.60 s   (cut-in triggered at 10.25 s)
+hardest brake 1.00 at t=14.20 s, gap 25.6 m, TTC 3.578 s
+speed 14.4 -> 7.2 m/s, settling into car-following at ~15 m gap
+```
+
+Three longitudinal controllers were measured before settling on IDM:
+
+| controller | hard brakes | max speed | score |
+|---|---|---|---|
+| PI with a hard TTC cutoff | 5 | 15.0 | 77.0 |
+| ...smoothed, with a deadband | 7 | 14.9 | 71.1 |
+| IDM | 2 | 15.0 | 85.6 |
+</details>
+
+<details>
 <summary><b>Test suite</b></summary>
 
 ```
 $ make test
-120 passed in 2.42s
+122 passed in 2.53s
 ```
 
 No CARLA required - the suite covers the safety envelope, the gRPC protocol

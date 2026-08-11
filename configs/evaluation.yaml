@@ -18,10 +18,20 @@ comfort:
   # Deceleration harsher than this counts as a hard brake, once per event
   # rather than once per tick.
   hard_brake_mps2: -4.0
+  # The event only ends once deceleration eases back above this. Without the
+  # hysteresis, deceleration hovering around the threshold inside a single
+  # manoeuvre is counted as several: one real braking event was being reported
+  # as nine.
+  hard_brake_release_mps2: -2.5
 
 route:
   # The route is the ego's starting lane followed forward for this far.
-  length_m: 300
+  #
+  # It must outlast the episode. A 40 s episode at 15 m/s covers 600 m; when
+  # this was 300 m the route ran out mid-episode, the controller lost its
+  # steering target and drove off the road - which looked like a driving bug
+  # and was a configuration one.
+  length_m: 600
 
 score:
   base: 100

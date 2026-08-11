@@ -22,7 +22,7 @@ import numpy as np
 from model_gateway.protocol import driving_pb2 as pb
 from model_gateway.protocol import driving_pb2_grpc as pb_grpc
 from simulator.policy import DrivingPolicy
-from simulator.types import Observation, Pose
+from simulator.types import LeadVehicle, Observation, Pose
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,12 @@ def observation_from_proto(msg: pb.Observation) -> Observation:
         ),
         rgb_front=decode_image(msg.rgb_front) if msg.HasField("rgb_front") else None,
         route_command=msg.route_command or None,
+        route_waypoints=[(w.x, w.y) for w in msg.route_waypoints],
+        lead_vehicle=(
+            LeadVehicle(gap_m=msg.lead_vehicle.gap_m,
+                        speed_mps=msg.lead_vehicle.speed_mps)
+            if msg.HasField("lead_vehicle") else None
+        ),
     )
 
 

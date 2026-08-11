@@ -140,6 +140,12 @@ class RemoteModelAdapter(DrivingPolicy):
         # Only ship sensors the model said it needs.
         if "rgb_front" in self.required_sensors and obs.rgb_front is not None:
             msg.rgb_front.CopyFrom(encode_image(obs.rgb_front, self.image_encoding))
+        if "route" in self.required_sensors and obs.route_waypoints:
+            for x, y in obs.route_waypoints:
+                msg.route_waypoints.add(x=x, y=y)
+        if "lead_vehicle" in self.required_sensors and obs.lead_vehicle is not None:
+            msg.lead_vehicle.gap_m = obs.lead_vehicle.gap_m
+            msg.lead_vehicle.speed_mps = obs.lead_vehicle.speed_mps
         return msg
 
     def health_check(self) -> bool:

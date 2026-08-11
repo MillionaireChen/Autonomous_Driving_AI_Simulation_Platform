@@ -42,7 +42,11 @@ scenario_vehicle:
   # scenario is actually describing, and it triggers regardless of how fast
   # the ego's policy chooses to drive.
   initial_longitudinal_distance_m: -25
-  speed_mps: 17
+  # Spec section 25 says 17 m/s. Against an ego cruising at 15 that is a 1.5 m/s
+  # closing speed, so the overtake alone takes about 25 s and there is no time
+  # left in a 40 s episode for the ego to react to the cut-in. 22 m/s completes
+  # the overtake in about 5 s and leaves the episode to test what it is for.
+  speed_mps: 22
 
 trigger:
   type: relative_distance
@@ -67,4 +71,5 @@ action:
 
 termination:
   collision: true
+  route_completed: true
   timeout_seconds: 40

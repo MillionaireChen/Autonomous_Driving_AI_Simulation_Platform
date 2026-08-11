@@ -13,3 +13,9 @@ models:
     endpoint: localhost:51001
     # Milliseconds before an inference counts as a timeout (spec section 50).
     timeout_ms: 500
+
+  - id: pid
+    name: PID Lane Follower
+    type: CONTROL_POLICY
+    endpoint: localhost:51002
+    timeout_ms: 500

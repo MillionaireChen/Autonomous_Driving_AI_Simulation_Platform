@@ -98,6 +98,19 @@ class TestComfort:
             engine.update(0.05, 10.0, accel, 0.0, None)
         assert engine.metrics.hard_brake_count == 2
 
+    def test_one_manoeuvre_wandering_across_the_threshold_counts_once(self, engine):
+        """The bug this guards: real deceleration oscillates either side of the
+        limit during a single brake. A bare edge detector reported 9 events for
+        2 actual manoeuvres."""
+        for accel in (-4.5, -3.8, -4.6, -3.9, -4.2, -3.7, -4.4):
+            engine.update(0.05, 10.0, accel, 0.0, None)
+        assert engine.metrics.hard_brake_count == 1
+
+    def test_the_event_ends_once_deceleration_really_eases(self, engine):
+        for accel in (-5.0, -5.0, -1.0, -1.0, -5.0):
+            engine.update(0.05, 10.0, accel, 0.0, None)
+        assert engine.metrics.hard_brake_count == 2
+
     def test_gentle_braking_is_not_a_hard_brake(self, engine):
         for _ in range(10):
             engine.update(0.05, 10.0, -2.0, 0.0, None)
