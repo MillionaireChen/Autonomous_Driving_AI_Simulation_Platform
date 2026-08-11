@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from statistics import mean
+
+from simulator.types import percentile
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -16,6 +19,7 @@ from backend.database.session import get_session
 from backend.experiment_manager import IllegalTransition
 from backend.schemas import (
     ArenaIn,
+    BatchIn,
     EpisodeOut,
     EventOut,
     ExperimentIn,
@@ -343,3 +347,93 @@ def simulators(request: Request):
         return {"simulators": [], "size": 0, "available": 0}
     return {"simulators": pool.status(), "size": pool.size,
             "available": pool.available}
+
+
+# --- batch evaluation (spec section 61) ----------------------------------
+@router.post("/batch", status_code=201, tags=["batch"])
+def create_batch(payload: BatchIn, request: Request,
+                 db: Session = Depends(get_session)):
+    """Run every model over the same set of seeds.
+
+    One episode is a sample of one. A model that passes a scenario on seed 42
+    has told you almost nothing; the same model over twenty seeds tells you
+    whether it drives.
+    """
+    if not payload.model_ids:
+        raise HTTPException(400, "no models given")
+    seeds = payload.seeds or list(range(payload.seed_start,
+                                        payload.seed_start + payload.count))
+    if not seeds:
+        raise HTTPException(400, "no seeds given")
+
+    try:
+        experiments = [
+            manager(request).create(db, model_id, payload.scenario_id, seed)
+            for model_id in payload.model_ids
+            for seed in seeds
+        ]
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    manager(request).start_many(db, experiments)
+    return {
+        "scenario_id": payload.scenario_id,
+        "seeds": seeds,
+        "models": payload.model_ids,
+        "experiments": [e.id for e in experiments],
+    }
+
+
+@router.get("/aggregate", tags=["batch"])
+def aggregate(scenario_id: str, db: Session = Depends(get_session),
+              seeds: str | None = None, experiments: str | None = None):
+    """Per-model summary over completed episodes of a scenario.
+
+    Pass `experiments` to summarise exactly one batch. Filtering by seed alone
+    silently pulls in every earlier run that happened to use the same seed - a
+    10-seed batch reported n=13 before this existed.
+    """
+    wanted_seeds = {int(s) for s in seeds.split(",")} if seeds else None
+    wanted_ids = set(experiments.split(",")) if experiments else None
+
+    rows = (db.query(Experiment, Episode)
+              .join(Episode, Episode.experiment_id == Experiment.id)
+              .filter(Experiment.scenario_id == scenario_id)
+              .all())
+
+    by_model: dict[str, list[Episode]] = {}
+    for experiment, episode in rows:
+        if wanted_ids is not None and experiment.id not in wanted_ids:
+            continue
+        if wanted_ids is None and wanted_seeds is not None \
+                and experiment.seed not in wanted_seeds:
+            continue
+        by_model.setdefault(experiment.model_id, []).append(episode)
+
+    def summarise(model_id: str, episodes: list[Episode]) -> dict:
+        n = len(episodes)
+        scores = sorted(e.score for e in episodes)
+        ttcs = [e.minimum_ttc for e in episodes if e.minimum_ttc is not None]
+        passes = sum(1 for e in episodes if e.result == "PASS")
+        collisions = sum(1 for e in episodes if e.collision)
+        return {
+            "model_id": model_id,
+            "episodes": n,
+            # Rates, not counts: comparable across models with different
+            # numbers of completed runs.
+            "success_rate": passes / n,
+            "collision_rate": collisions / n,
+            "mean_score": mean(scores),
+            "p95_score": percentile(scores, 95),
+            "worst_score": scores[0],
+            "mean_minimum_ttc": mean(ttcs) if ttcs else None,
+            "mean_route_completion": mean([e.route_completion for e in episodes]),
+            "mean_lane_invasions": mean([float(e.lane_invasion_count) for e in episodes]),
+            "mean_latency_p50": mean([e.model_latency_p50 for e in episodes]),
+            "mean_latency_p95": mean([e.model_latency_p95 for e in episodes]),
+        }
+
+    summaries = [summarise(m, e) for m, e in sorted(by_model.items())]
+    # Best first, by success rate then mean score.
+    summaries.sort(key=lambda s: (s["success_rate"], s["mean_score"]), reverse=True)
+    return {"scenario_id": scenario_id, "models": summaries}

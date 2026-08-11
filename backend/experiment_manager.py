@@ -174,32 +174,51 @@ class ExperimentManager:
         from simulator.scenario import load_scenario
         from simulator.worker import SimulationWorker
 
-        db: Session = self.sessions()
+        # Read what the episode needs with a short-lived session, then let go
+        # of the connection before queueing for a simulator.
+        #
+        # A batch of 30 experiments starts 30 threads, but only as many run as
+        # there are simulators - the rest sit in the lease queue for minutes. If
+        # each of them holds a database connection while waiting, the pool is
+        # exhausted and every later request fails with
+        # "QueuePool limit of size 5 overflow 10 reached". Waiting threads must
+        # hold nothing.
+        with self.sessions() as setup_db:
+            experiment = setup_db.get(Experiment, experiment_id)
+            model = setup_db.get(Model, experiment.model_id)
+            scenario_row = setup_db.get(Scenario, experiment.scenario_id)
+
+            model_endpoint = model.endpoint
+            model_timeout_ms = model.timeout_ms
+            scenario_source = scenario_row.source or scenario_row.id
+            seed = experiment.seed
+            record_frames = bool(experiment.record_frames)
+
+        sim_config = cfg.load_simulator_config()
+        camera_config = cfg.load_camera_config()
+        ego_config = cfg.load_yaml("simulator/ego.yaml")
+        episode_config = cfg.load_episode_config()
+        evaluation_config = cfg.load_yaml("evaluation.yaml")
+
+        scenario = load_scenario(scenario_source)
+        scenario.seed = seed
+
+        # Lease a simulator for the length of the episode. Blocks while every
+        # server is busy, which is the queue from spec section 62.
+        lease = (self.pool.lease() if self.pool is not None
+                 else contextlib.nullcontext(None))
+
+        db: Session = None  # opened once a simulator is actually ours
         try:
-            experiment = db.get(Experiment, experiment_id)
-            model = db.get(Model, experiment.model_id)
-            scenario_row = db.get(Scenario, experiment.scenario_id)
-
-            sim_config = cfg.load_simulator_config()
-            camera_config = cfg.load_camera_config()
-            ego_config = cfg.load_yaml("simulator/ego.yaml")
-            episode_config = cfg.load_episode_config()
-            evaluation_config = cfg.load_yaml("evaluation.yaml")
-
-            scenario = load_scenario(scenario_row.source or scenario_row.id)
-            scenario.seed = experiment.seed
-
-            from model_gateway.adapters.remote import RemoteModelAdapter
-
-            policy = RemoteModelAdapter(
-                endpoint=model.endpoint, timeout_ms=model.timeout_ms
-            )
-
-            # Lease a simulator for the length of the episode. Blocks while
-            # every server is busy, which is the queue from spec section 62.
-            lease = (self.pool.lease() if self.pool is not None
-                     else contextlib.nullcontext(None))
             with lease as endpoint:
+                from model_gateway.adapters.remote import RemoteModelAdapter
+
+                policy = RemoteModelAdapter(
+                    endpoint=model_endpoint, timeout_ms=model_timeout_ms
+                )
+
+                db = self.sessions()
+                experiment = db.get(Experiment, experiment_id)
                 if endpoint is not None:
                     sim_config = copy.deepcopy(sim_config)
                     sim_config["server"]["host"] = endpoint.host
@@ -221,7 +240,7 @@ class ExperimentManager:
                     output_dir=output_dir, scenario=scenario,
                     stop_flag=stop_flag,
                     on_tick=stream.publish if stream is not None else None,
-                    record_frames=bool(experiment.record_frames),
+                    record_frames=record_frames,
                 )
 
             self._persist(db, experiment, result, output_dir)
@@ -241,7 +260,12 @@ class ExperimentManager:
                 self.set_status(db, experiment, "COMPLETED")
 
         except Exception as exc:
-            db.rollback()
+            # The failure may have happened before a session existed - a lease
+            # timeout, or the model service being unreachable.
+            if db is None:
+                db = self.sessions()
+            else:
+                db.rollback()
             db.expire_all()
             experiment = db.get(Experiment, experiment_id)
             if experiment is not None and experiment.status not in TERMINAL:
@@ -250,7 +274,8 @@ class ExperimentManager:
                 experiment.finished_at = datetime.now(timezone.utc)
                 db.commit()
         finally:
-            db.close()
+            if db is not None:
+                db.close()
             stream = self.streams.get(experiment_id)
             if stream is not None:
                 stream.close()

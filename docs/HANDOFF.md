@@ -1,8 +1,8 @@
 # Handoff - state of the build and what is left
 
-This file is the contract for whoever continues the work, human or agent. Keep
-it current: update the phase table and the notes at the bottom every time a
-phase lands.
+All fourteen phases are complete. This file stays as the contract for whoever
+picks the work up next: keep the phase table and the notes at the bottom
+current.
 
 ## Rules that do not change
 
@@ -75,7 +75,7 @@ Leaving CARLA running holds GPU 0 from other users.
 | 11 | Learned driving model | done |
 | 12 | Model Arena (A vs B) | done |
 | 13 | Parallel simulation (2 CARLA instances) | done |
-| 14 | Batch evaluation over seeds | **next** |
+| 14 | Batch evaluation over seeds | done |
 
 ### Phase 9 - Replay
 

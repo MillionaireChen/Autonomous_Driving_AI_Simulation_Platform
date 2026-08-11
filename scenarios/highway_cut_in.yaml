@@ -69,6 +69,22 @@ action:
   # and the time-to-collision stays undefined.
   speed_after_mps: 8.0
 
+# Per-seed variation (spec section 29). Without this the seed changes nothing:
+# background traffic is off, so it feeds no RNG, and a "20 seed" sweep is the
+# same episode twenty times. A batch of identical runs looks like a rock-solid
+# result and measures a single sample.
+#
+# Each value is [min, max], sampled deterministically from the episode seed.
+randomization:
+  scenario_vehicle:
+    initial_longitudinal_distance_m: [-40.0, -15.0]
+    speed_mps: [19.0, 24.0]
+  action:
+    duration_seconds: [1.4, 2.6]
+    speed_after_mps: [5.0, 11.0]
+  trigger:
+    distance_m: [8.0, 16.0]
+
 termination:
   collision: true
   route_completed: true

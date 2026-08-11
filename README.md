@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 13 of 14 complete - parallel simulation.**
+**All 14 phases complete.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -50,8 +50,11 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   See [docs/PHASE12.md](docs/PHASE12.md).
 - **Phase 13** - a pool of CARLA servers, so two episodes run at once without
   affecting each other. See [docs/PHASE13.md](docs/PHASE13.md).
+- **Phase 14** - batch evaluation over randomised seeds, with rates instead of
+  anecdotes. See [docs/PHASE14.md](docs/PHASE14.md).
 
-Batch evaluation lands in the final phase. Nothing in
+Nothing in this repo is a placeholder: if a directory exists, the code in it
+runs, and every number below was measured on this machine. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ![dashboard](docs/images/dashboard-result.png)
@@ -402,11 +405,37 @@ perturbed the physics.
 </details>
 
 <details>
+<summary><b>Phase 14 - three models, ten randomised seeds</b></summary>
+
+```
+$ uv run python scripts/batch_eval.py --models pid cnn_il dummy --count 10
+30 episodes (3 models x 10 seeds) across 2 simulator(s)
+  30/30 finished, 0 running, 441s elapsed
+
+model        n  success  collision    mean    p95  worst  meanTTC  route%  lane  p50 ms
+---------------------------------------------------------------------------------------
+pid         10     100%         0%    84.9   89.0   71.5     5.88    59.2   0.0    0.98
+cnn_il      10       0%       100%     0.0    0.0    0.0     4.43    43.4  11.2   10.85
+dummy       10       0%       100%     0.0    0.0    0.0    19.43    39.5  12.6    0.97
+```
+
+The first attempt at this table reported `mean 85.6, p95 85.6, worst 85.6` -
+identical to one decimal, because the seed fed only the background-traffic RNG
+and background traffic is off. It was the same episode ten times, reporting
+confidence it had not earned. Scenarios now declare what varies per seed and
+sample it deterministically; the very next run scored the same model **82.6 on
+one seed and 0.0 on another**.
+
+The PID's spread is the point: a single episode says 85.6 and tells you nothing
+about the 71.5.
+</details>
+
+<details>
 <summary><b>Test suite</b></summary>
 
 ```
 $ make test
-147 passed in 2.36s
+152 passed in 3.38s
 ```
 
 No CARLA required - the suite covers the safety envelope, the gRPC protocol

@@ -60,6 +60,7 @@ class ScenarioConfig:
     trigger: dict[str, Any] = field(default_factory=dict)
     action: dict[str, Any] = field(default_factory=dict)
     termination: dict[str, Any] = field(default_factory=dict)
+    randomization: dict[str, Any] = field(default_factory=dict)
     version: str = "1.0"
 
     @classmethod
@@ -252,6 +253,7 @@ class ScenarioRunner:
     def __init__(self, config: ScenarioConfig) -> None:
         self.config = config
         self.rng = random.Random(config.seed)
+        self._apply_randomization()
 
         self.trigger = self._build(TRIGGERS, config.trigger, "trigger")
         self.action = self._build(ACTIONS, config.action, "action")
@@ -263,6 +265,22 @@ class ScenarioRunner:
         self.events: list[dict[str, Any]] = []
         self.triggered = False
         self.triggered_at: Optional[float] = None
+
+    def _apply_randomization(self) -> None:
+        """Sample the per-seed variation onto the scenario (spec section 29).
+
+        Deterministic in the seed: the same seed always produces the same
+        episode, and different seeds produce genuinely different ones. Applied
+        before the trigger and action are built, so they see the sampled
+        values.
+        """
+        for section, entries in (self.config.randomization or {}).items():
+            target = getattr(self.config, section, None)
+            if not isinstance(target, dict):
+                continue
+            for key, bounds in entries.items():
+                low, high = float(bounds[0]), float(bounds[1])
+                target[key] = self.rng.uniform(low, high)
 
     @staticmethod
     def _build(registry: dict, config: dict, kind: str):

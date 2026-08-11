@@ -48,7 +48,13 @@ def database_url() -> str:
 def get_engine() -> Engine:
     global _engine, _SessionFactory
     if _engine is None:
-        _engine = create_engine(database_url(), pool_pre_ping=True, future=True)
+        # Episode threads hold a connection for the length of a run, so the
+        # default 5+10 is easily exhausted by a batch. Waiting threads hold
+        # nothing (see ExperimentManager._run), but headroom is cheap.
+        _engine = create_engine(
+            database_url(), pool_pre_ping=True, future=True,
+            pool_size=20, max_overflow=20, pool_timeout=60,
+        )
         _SessionFactory = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
 

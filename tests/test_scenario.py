@@ -237,3 +237,47 @@ class TestRunnerValidation:
         runner = ScenarioRunner(self._config())
         runner.log_event(1.2345, "THING", {"a": 1})
         assert runner.events == [{"time": 1.234, "type": "THING", "data": {"a": 1}}]
+
+
+class TestSeededRandomization:
+    """Per-seed variation (spec section 29).
+
+    Without it the seed changes nothing - background traffic is off, so it
+    feeds no RNG - and a twenty-seed sweep is the same episode twenty times.
+    That reads as a rock-solid result and measures a single sample.
+    """
+
+    def _config(self, seed: int):
+        from simulator.scenario import load_scenario
+
+        scenario = load_scenario("highway_cut_in")
+        scenario.seed = seed
+        return scenario
+
+    def test_the_shipped_scenario_declares_randomization(self):
+        assert self._config(1).randomization
+
+    def test_different_seeds_give_different_episodes(self):
+        a = ScenarioRunner(self._config(1)).config
+        b = ScenarioRunner(self._config(2)).config
+        assert (a.scenario_vehicle["initial_longitudinal_distance_m"]
+                != b.scenario_vehicle["initial_longitudinal_distance_m"])
+
+    def test_the_same_seed_gives_the_same_episode(self):
+        a = ScenarioRunner(self._config(7)).config
+        b = ScenarioRunner(self._config(7)).config
+        assert (a.scenario_vehicle["speed_mps"] == b.scenario_vehicle["speed_mps"])
+        assert (a.action["speed_after_mps"] == b.action["speed_after_mps"])
+
+    def test_sampled_values_stay_inside_their_bounds(self):
+        for seed in range(1, 25):
+            config = ScenarioRunner(self._config(seed)).config
+            low, high = config.randomization["scenario_vehicle"]["speed_mps"]
+            assert low <= config.scenario_vehicle["speed_mps"] <= high
+
+    def test_the_trigger_sees_the_sampled_value(self):
+        """Randomisation is applied before the trigger is built, or the trigger
+        would use the unsampled value from the file."""
+        config = self._config(3)
+        runner = ScenarioRunner(config)
+        assert runner.trigger.distance_m == config.trigger["distance_m"]

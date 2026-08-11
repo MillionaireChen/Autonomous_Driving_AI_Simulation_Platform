@@ -71,6 +71,17 @@ class ArenaIn(BaseModel):
     record_frames: bool = False
 
 
+class BatchIn(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_ids: list[str]
+    scenario_id: str
+    #: Either an explicit list of seeds, or count seeds from seed_start.
+    seeds: Optional[list[int]] = None
+    seed_start: int = 1
+    count: int = 10
+
+
 class ExperimentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 

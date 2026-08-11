@@ -22,7 +22,11 @@ from backend.database.session import database_url  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which silently switches off
+    # every logger already configured - including uvicorn's access and error
+    # loggers, since migrations run inside the app's startup. The symptom is
+    # an API that returns 500 and logs nothing at all.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 config.set_main_option("sqlalchemy.url", database_url().replace("%", "%%"))
 target_metadata = Base.metadata
