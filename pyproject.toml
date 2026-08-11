@@ -21,6 +21,8 @@ dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.1",
     "alembic>=1.19.1",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
 ]
 
 [dependency-groups]
@@ -32,6 +34,9 @@ dev = [
 [tool.uv]
 # The virtualenv lives on local disk (see .env.example); /home is a slow NFS mount.
 package = false
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cu128"
 
 [tool.pytest.ini_options]
 # The repo is not pip-installed, so tests import the packages from the tree.

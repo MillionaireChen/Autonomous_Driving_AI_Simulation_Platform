@@ -96,7 +96,18 @@ def build_route(
         successors = waypoint.next(step_m)
         if not successors:
             break  # ran out of road; the route is as long as the road allows
-        waypoint = successors[0]
+
+        # Prefer the successor in the same lane. Taking next()[0] blindly hops
+        # lanes wherever the map offers a choice, and a car faithfully
+        # following its own route is then scored for crossing lane markings:
+        # one expert episode recorded 78 lane invasions with no collision and
+        # 90% route completion.
+        same_lane = [w for w in successors
+                     if w.lane_id == waypoint.lane_id
+                     and w.road_id == waypoint.road_id]
+        if not same_lane:
+            same_lane = [w for w in successors if w.lane_id == waypoint.lane_id]
+        waypoint = (same_lane or successors)[0]
         waypoints.append(waypoint)
         travelled += step_m
     return Route.from_waypoints(waypoints)

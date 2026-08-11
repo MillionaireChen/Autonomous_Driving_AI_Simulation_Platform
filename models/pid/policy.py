@@ -7,9 +7,12 @@ training data.
 
 Three parts, none of them clever:
 
-* **Lateral**: pure pursuit onto the route it is given. Steering is the angle
-  to a lookahead point that grows with speed, which is what keeps a controller
-  from oscillating at speed and from cutting corners when slow.
+* **Lateral**: pure pursuit onto the route it is given, aiming at a point that
+  grows with speed. The lookahead is deliberately short: cross-track error on a
+  curve goes as L^2/(2R), so a long lookahead rides the inside lane marking all
+  the way round a bend. A Stanley cross-track term was tried instead and went
+  unstable on a sign convention; shortening the lookahead attacks the same
+  error with no feedback loop to get wrong.
 * **Longitudinal**: the Intelligent Driver Model, which handles cruising and
   car-following with one continuous acceleration law.
 
@@ -39,8 +42,8 @@ class PIDAgent(DrivingPolicy):
         # Lateral
         steer_gain: float = 0.85,
         min_lookahead_m: float = 6.0,
-        lookahead_time_s: float = 1.1,
-        max_lookahead_m: float = 22.0,
+        lookahead_time_s: float = 0.7,
+        max_lookahead_m: float = 11.0,
         # Longitudinal (IDM)
         max_accel_mps2: float = 1.6,
         comfort_decel_mps2: float = 2.2,
@@ -97,6 +100,7 @@ class PIDAgent(DrivingPolicy):
             math.sin(math.atan2(dy, dx) - heading),
             math.cos(math.atan2(dy, dx) - heading),
         )
+
         return max(-1.0, min(1.0, self.steer_gain * error))
 
     def _lookahead_point(self, obs: Observation) -> tuple[float, float] | None:
