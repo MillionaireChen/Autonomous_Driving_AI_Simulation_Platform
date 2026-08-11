@@ -63,10 +63,14 @@ cmd_start() {
     # -RenderOffScreen  : render without a display server
     # -graphicsadapter  : pick the Vulkan device (UE4-level GPU selection)
     # CUDA_VISIBLE_DEVICES pins any CUDA-side work to the same card
+    #
+    # Do NOT set SDL_VIDEODRIVER=offscreen here. It looks like the right thing
+    # for a headless box, but it makes 0.9.16 exit 1 immediately after
+    # "Disabling core dumps." with no further diagnostics. -RenderOffScreen
+    # already handles the display-less case on its own.
     (
         cd "$CARLA_ROOT"
         CUDA_VISIBLE_DEVICES="$CARLA_GPU" \
-        SDL_VIDEODRIVER=offscreen \
         nohup ./CarlaUE4.sh \
             -RenderOffScreen \
             -nosound \
@@ -109,8 +113,10 @@ cmd_stop() {
     else
         log "no tracked process"
     fi
-    # The shipping binary can outlive the wrapper.
-    pkill -f 'CarlaUE4-Linux-Shipping' 2>/dev/null && log "killed stray CarlaUE4-Linux-Shipping" || true
+    # The shipping binary can outlive the wrapper script. Match on our own RPC
+    # port so a CARLA belonging to somebody else on this shared box survives.
+    pkill -f "CarlaUE4-Linux-Shipping.*carla-rpc-port=${CARLA_RPC_PORT}" 2>/dev/null \
+        && log "killed stray CarlaUE4-Linux-Shipping on port ${CARLA_RPC_PORT}" || true
     rm -f "$PID_FILE"
     log "stopped"
 }
