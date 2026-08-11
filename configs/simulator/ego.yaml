@@ -1,0 +1,6 @@
+# Ego vehicle definition (spec section 19).
+# One ego vehicle for now; multi-vehicle support is deliberately out of scope.
+
+blueprint: vehicle.tesla.model3
+role_name: ego
+target_speed_mps: 15

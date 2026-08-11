@@ -1,4 +1,4 @@
-.PHONY: help env install-carla carla-start carla-stop carla-status smoke clean-output
+.PHONY: help env install-carla carla-start carla-stop carla-status smoke episode test clean-output
 
 # Load .env if present so CARLA_ROOT / ports / GPU come from one place.
 ifneq (,$(wildcard .env))
@@ -17,6 +17,8 @@ help:
 	@echo "  make carla-status   Show whether the server is up and answering RPC"
 	@echo "  make carla-stop     Stop the CARLA server"
 	@echo "  make smoke          Run the Phase 1 acceptance test"
+	@echo "  make episode        Run one closed-loop episode with the dummy policy"
+	@echo "  make test           Run unit tests (no CARLA required)"
 	@echo "  make clean-output   Delete generated frames and logs"
 
 env:
@@ -37,6 +39,12 @@ carla-status:
 
 smoke:
 	$(UV) run python scripts/carla_smoke_test.py
+
+episode:
+	$(UV) run python scripts/run_episode.py
+
+test:
+	$(UV) run pytest -q
 
 clean-output:
 	rm -rf output logs

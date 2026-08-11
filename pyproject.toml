@@ -22,3 +22,8 @@ dev = [
 [tool.uv]
 # The virtualenv lives on local disk (see .env.example); /home is a slow NFS mount.
 package = false
+
+[tool.pytest.ini_options]
+# The repo is not pip-installed, so tests import the packages from the tree.
+pythonpath = ["."]
+testpaths = ["tests"]

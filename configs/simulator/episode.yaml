@@ -1,0 +1,20 @@
+# Default episode settings for a plain closed-loop run.
+# A scenario (Phase 4) will later override these from its own YAML.
+
+duration_seconds: 20
+
+# The world steps at 20 Hz; the policy is asked at this rate and the previous
+# action is reapplied in between (spec section 17).
+inference_hz: 10
+
+# Ticks spent braked before the episode clock starts, so the measured distance
+# excludes the vehicle settling onto its suspension.
+settle_ticks: 20
+
+spawn_index: 0
+route_command: LANE_FOLLOW
+
+weather:
+  cloudiness: 10.0
+  precipitation: 0.0
+  sun_altitude_angle: 60.0

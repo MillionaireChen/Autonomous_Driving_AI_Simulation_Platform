@@ -17,14 +17,18 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 1 of 14 - CARLA Foundation.** Only the foundation is built so far: a
-headless CARLA server pinned to a single GPU, a Python 3.11 client, and an
-end-to-end smoke test that spawns an ego vehicle, streams camera frames, drives
-it and stops it.
+**Phase 2 of 14 complete - Simulation Worker.**
 
-The simulation worker, model gateway, scenario engine, evaluation engine,
-backend and dashboard land in later phases. Nothing in this repo is a
-placeholder: if a directory exists, the code in it runs.
+- **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
+  client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
+- **Phase 2** - the closed loop itself: a synchronous fixed-timestep worker
+  that turns observations into actions through a `DrivingPolicy` and back into
+  the vehicle, with a safety envelope around whatever the model returns. See
+  [docs/PHASE2.md](docs/PHASE2.md).
+
+The model gateway, scenario engine, evaluation engine, backend and dashboard
+land in later phases. Nothing in this repo is a placeholder: if a directory
+exists, the code in it runs.
 
 ## Requirements
 
@@ -61,19 +65,34 @@ of those steps fails its numeric threshold.
 ## Layout
 
 ```
+simulator/
+  types.py                   Observation, VehicleControlAction, EpisodeResult
+  policy.py                  the DrivingPolicy interface
+  worker.py                  the closed-loop episode runner
+  carla_client.py            connection and synchronous-world lifecycle
+  ego.py, sensors.py         ego spawning, camera attachment
+models/
+  dummy/policy.py            constant-control baseline
 configs/
   simulator/carla.yaml       server connection, map, fixed timestep, GPU
+  simulator/ego.yaml         ego blueprint and target speed
+  simulator/episode.yaml     duration, inference rate, weather
   sensors/front_camera.yaml  800x450 @ 10 FPS front RGB camera
 scripts/
   install_carla.sh           fetch and unpack the CARLA server package
   carla_server.sh            start / stop / status for the headless server
   carla_smoke_test.py        Phase 1 acceptance test
-docs/
-  PHASE1.md                  environment findings and acceptance results
+  run_episode.py             run one closed-loop episode
+tests/                       unit tests, no CARLA required
+docs/                        per-phase findings and acceptance results
 ```
 
-Sensor and simulator parameters are read from YAML, never hard-coded in the
-client. Scenarios follow the same rule from Phase 4 onward.
+Sensor, ego and simulator parameters are read from YAML, never hard-coded in
+the client. Scenarios follow the same rule from Phase 4 onward.
+
+`simulator/types.py` and `simulator/policy.py` import no CARLA at all. That is
+what will let a model run in another process, container or machine from
+Phase 3 onward without the worker changing.
 
 ## Design Rules
 
