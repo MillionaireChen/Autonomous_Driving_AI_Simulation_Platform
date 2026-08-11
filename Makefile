@@ -1,4 +1,5 @@
-.PHONY: help env install-carla carla-start carla-stop carla-status smoke episode test clean-output
+.PHONY: help env install-carla carla-start carla-stop carla-status smoke episode \
+        episode-grpc model-dummy proto test clean-output
 
 # Load .env if present so CARLA_ROOT / ports / GPU come from one place.
 ifneq (,$(wildcard .env))
@@ -17,7 +18,10 @@ help:
 	@echo "  make carla-status   Show whether the server is up and answering RPC"
 	@echo "  make carla-stop     Stop the CARLA server"
 	@echo "  make smoke          Run the Phase 1 acceptance test"
-	@echo "  make episode        Run one closed-loop episode with the dummy policy"
+	@echo "  make episode        Run one closed-loop episode, policy in-process"
+	@echo "  make model-dummy    Serve the dummy model over gRPC (foreground)"
+	@echo "  make episode-grpc   Run one episode against the gRPC model service"
+	@echo "  make proto          Regenerate the gRPC stubs from driving.proto"
 	@echo "  make test           Run unit tests (no CARLA required)"
 	@echo "  make clean-output   Delete generated frames and logs"
 
@@ -41,7 +45,18 @@ smoke:
 	$(UV) run python scripts/carla_smoke_test.py
 
 episode:
-	$(UV) run python scripts/run_episode.py
+	$(UV) run python scripts/run_episode.py --policy dummy
+
+model-dummy:
+	$(UV) run python models/dummy/service.py --port 51001
+
+episode-grpc:
+	$(UV) run python scripts/run_episode.py --model dummy
+
+proto:
+	$(UV) run python -m grpc_tools.protoc -I. \
+		--python_out=. --grpc_python_out=. --pyi_out=. \
+		model_gateway/protocol/driving.proto
 
 test:
 	$(UV) run pytest -q

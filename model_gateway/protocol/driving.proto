@@ -1,0 +1,110 @@
+// The contract between the simulator and any driving model.
+//
+// A model implements this service and the simulator talks to it over gRPC
+// (spec section 15). That is what lets a model live in another process, on
+// another GPU, in another container or on another machine, without the
+// simulation worker knowing the difference.
+//
+// Only CONTROL_POLICY is implemented today. TRAJECTORY_POLICY is named in the
+// enum because the model type is part of the handshake, but the trajectory
+// message and its controller arrive with the phase that can actually execute
+// a trajectory.
+
+syntax = "proto3";
+
+package arena.v1;
+
+service DrivingModel {
+  // Liveness. Cheap and side-effect free.
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Identity and, importantly, which sensors this model actually needs.
+  rpc GetModelInfo(GetModelInfoRequest) returns (ModelInfo);
+
+  // Start a new episode. Any per-episode state is cleared here.
+  rpc ResetEpisode(ResetEpisodeRequest) returns (ResetEpisodeResponse);
+
+  // One observation in, one action out.
+  rpc Infer(InferRequest) returns (InferResponse);
+}
+
+enum ModelType {
+  MODEL_TYPE_UNSPECIFIED = 0;
+  CONTROL_POLICY = 1;
+  TRAJECTORY_POLICY = 2;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string detail = 2;
+}
+
+message GetModelInfoRequest {}
+
+message ModelInfo {
+  string id = 1;
+  string name = 2;
+  ModelType type = 3;
+  // Sensor names this model consumes, e.g. "rgb_front", "speed". The gateway
+  // sends only these, so a model that ignores camera data does not pay for
+  // megabytes of pixels every tick.
+  repeated string required_sensors = 4;
+  string version = 5;
+}
+
+message ResetEpisodeRequest {
+  string episode_id = 1;
+  double fixed_delta_seconds = 2;
+  double target_speed_mps = 3;
+  int32 spawn_index = 4;
+}
+
+message ResetEpisodeResponse {
+  bool ok = 1;
+  string detail = 2;
+}
+
+message Pose {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  double roll = 4;
+  double pitch = 5;
+  double yaw = 6;
+}
+
+message Image {
+  int32 width = 1;
+  int32 height = 2;
+  // "rgb8" for raw bytes, "jpeg" for encoded.
+  string encoding = 3;
+  bytes data = 4;
+}
+
+message Observation {
+  int64 frame_id = 1;
+  double timestamp = 2;
+  double speed_mps = 3;
+  double acceleration_mps2 = 4;
+  double steering_angle = 5;
+  Pose ego_pose = 6;
+  Image rgb_front = 7;
+  string route_command = 8;
+}
+
+message VehicleControl {
+  double throttle = 1;
+  double steer = 2;
+  double brake = 3;
+  bool hand_brake = 4;
+}
+
+message InferRequest {
+  Observation observation = 1;
+}
+
+message InferResponse {
+  VehicleControl control = 1;
+}

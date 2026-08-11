@@ -202,6 +202,8 @@ class SimulationWorker:
 
         result.simulated_seconds = result.ticks * self.fixed_delta
         result.wall_seconds = time.time() - wall_start
+        # Remote adapters track deadline misses; in-process policies have none.
+        result.model_timeouts = int(getattr(policy, "timeouts", 0))
         result.inference_latency_ms_p50 = percentile(latencies, 50)
         result.inference_latency_ms_p95 = percentile(latencies, 95)
 

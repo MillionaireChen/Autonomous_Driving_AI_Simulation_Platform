@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 2 of 14 complete - Simulation Worker.**
+**Phase 3 of 14 complete - Model Gateway.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -25,10 +25,13 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   that turns observations into actions through a `DrivingPolicy` and back into
   the vehicle, with a safety envelope around whatever the model returns. See
   [docs/PHASE2.md](docs/PHASE2.md).
+- **Phase 3** - models run as separate gRPC services. The same episode gives
+  the same trajectory whether the model is in-process or across a socket. See
+  [docs/PHASE3.md](docs/PHASE3.md).
 
-The model gateway, scenario engine, evaluation engine, backend and dashboard
-land in later phases. Nothing in this repo is a placeholder: if a directory
-exists, the code in it runs.
+The scenario engine, evaluation engine, backend and dashboard land in later
+phases. Nothing in this repo is a placeholder: if a directory exists, the code
+in it runs.
 
 ## Requirements
 
@@ -71,9 +74,15 @@ simulator/
   worker.py                  the closed-loop episode runner
   carla_client.py            connection and synchronous-world lifecycle
   ego.py, sensors.py         ego spawning, camera attachment
+model_gateway/
+  protocol/driving.proto     the simulator <-> model contract
+  server.py                  serve any DrivingPolicy over gRPC
+  adapters/remote.py         a remote model, as a local policy
 models/
   dummy/policy.py            constant-control baseline
+  dummy/service.py           the same policy as a gRPC service
 configs/
+  models.yaml                model registry: id, type, endpoint
   simulator/carla.yaml       server connection, map, fixed timestep, GPU
   simulator/ego.yaml         ego blueprint and target speed
   simulator/episode.yaml     duration, inference rate, weather
@@ -93,6 +102,47 @@ the client. Scenarios follow the same rule from Phase 4 onward.
 `simulator/types.py` and `simulator/policy.py` import no CARLA at all. That is
 what will let a model run in another process, container or machine from
 Phase 3 onward without the worker changing.
+
+## Adding Your Own Model
+
+Implement one method, and the simulator can drive with it:
+
+```python
+from model_gateway.server import serve
+from simulator.policy import DrivingPolicy
+from simulator.types import VehicleControlAction
+
+class MyDrivingModel(DrivingPolicy):
+    name = "my-model"
+    required_sensors = ("rgb_front",)   # only these are sent to you
+
+    def reset(self, config):
+        ...
+
+    def infer(self, observation):
+        return VehicleControlAction(steer=..., throttle=..., brake=...)
+
+serve(MyDrivingModel(), port=51002, model_id="my-model")
+```
+
+Register the endpoint in `configs/models.yaml`:
+
+```yaml
+models:
+  - id: my-model
+    type: CONTROL_POLICY
+    endpoint: localhost:51002
+```
+
+Then drive with it:
+
+```bash
+uv run python scripts/run_episode.py --model my-model
+```
+
+The model may live in any process, on any GPU, on any host. It receives only
+the sensors it declares, and it gets 500 ms to answer before the simulator
+falls back to braking.
 
 ## Design Rules
 

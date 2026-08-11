@@ -12,6 +12,9 @@ dependencies = [
     "numpy>=1.26",
     "pyyaml>=6.0",
     "pillow>=10.0",
+    "grpcio>=1.83.0",
+    "grpcio-tools>=1.83.0",
+    "protobuf>=7.35.1",
 ]
 
 [dependency-groups]

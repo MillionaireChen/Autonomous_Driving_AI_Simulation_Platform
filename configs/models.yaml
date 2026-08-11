@@ -1,0 +1,15 @@
+# Model registry (spec section 16).
+#
+# Any model reachable at a gRPC endpoint speaking the DrivingModel protocol can
+# be listed here; the simulator needs nothing else to drive with it.
+#
+# gpu is advisory metadata for whoever launches the service - the simulator
+# never places models on devices itself.
+
+models:
+  - id: dummy
+    name: Dummy Constant Control
+    type: CONTROL_POLICY
+    endpoint: localhost:51001
+    # Milliseconds before an inference counts as a timeout (spec section 50).
+    timeout_ms: 500

@@ -3,12 +3,12 @@
 
     observation -> policy -> action -> CARLA -> next observation
 
-Phase 2 entry point. The policy still runs in-process here; Phase 3 moves it
-behind gRPC without the worker changing.
+The policy can be in-process or a remote gRPC model service. The simulation
+worker cannot tell the difference; only the latency numbers change.
 
 Usage:
-    uv run python scripts/run_episode.py
-    uv run python scripts/run_episode.py --policy dummy --duration 20
+    uv run python scripts/run_episode.py --policy dummy      # in-process
+    uv run python scripts/run_episode.py --model dummy       # over gRPC
 """
 
 from __future__ import annotations
@@ -27,20 +27,49 @@ from simulator import config as cfg  # noqa: E402
 from simulator.policy import DrivingPolicy  # noqa: E402
 from simulator.worker import SimulationWorker  # noqa: E402
 
-POLICIES: dict[str, type[DrivingPolicy]] = {
+IN_PROCESS_POLICIES: dict[str, type[DrivingPolicy]] = {
     "dummy": DummyAgent,
 }
 
 
+def build_remote_policy(model_id: str, timeout_ms: float | None) -> DrivingPolicy:
+    """Look the model up in configs/models.yaml and connect to it."""
+    from model_gateway.adapters.remote import RemoteModelAdapter
+
+    registry = cfg.load_yaml("models.yaml")
+    entries = {m["id"]: m for m in registry.get("models", [])}
+    if model_id not in entries:
+        raise SystemExit(
+            f"model {model_id!r} is not in configs/models.yaml "
+            f"(known: {', '.join(sorted(entries)) or 'none'})"
+        )
+    entry = entries[model_id]
+    return RemoteModelAdapter(
+        endpoint=entry["endpoint"],
+        timeout_ms=timeout_ms if timeout_ms is not None else entry.get("timeout_ms", 500),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--policy", default="dummy", choices=sorted(POLICIES))
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--policy", choices=sorted(IN_PROCESS_POLICIES),
+                        help="run a policy in this process")
+    source.add_argument("--model", help="connect to a model from configs/models.yaml")
     parser.add_argument("--episode-id", default="EP-0001")
     parser.add_argument("--duration", type=float, default=None,
                         help="override duration_seconds from episode.yaml")
+    parser.add_argument("--model-timeout-ms", type=float, default=None)
     parser.add_argument("--output", default=None,
                         help="directory for episode.json and telemetry.jsonl")
     args = parser.parse_args()
+
+    if args.model:
+        policy = build_remote_policy(args.model, args.model_timeout_ms)
+        source_label = f"gRPC {policy.endpoint}"
+    else:
+        policy = IN_PROCESS_POLICIES[args.policy or "dummy"]()
+        source_label = "in-process"
 
     sim_config = cfg.load_simulator_config()
     camera_config = cfg.load_camera_config()
@@ -53,11 +82,12 @@ def main() -> int:
         REPO_ROOT / "output" / "episodes" / args.episode_id
 
     worker = SimulationWorker(sim_config, camera_config, ego_config, episode_config)
-    policy = POLICIES[args.policy]()
 
-    print(f"episode {args.episode_id}: policy={policy.name} "
+    print(f"episode {args.episode_id}: policy={policy.name} ({source_label}) "
           f"duration={episode_config['duration_seconds']}s "
           f"sim={worker.sim_hz:.0f}Hz inference={worker.sim_hz / worker.inference_interval:.0f}Hz")
+    if policy.required_sensors:
+        print(f"model requires sensors: {', '.join(policy.required_sensors)}")
 
     result = worker.run_episode(policy, episode_id=args.episode_id, output_dir=output_dir)
 
@@ -70,7 +100,7 @@ def main() -> int:
           f" max {result.max_speed_mps:.1f} m/s")
     print(f"camera frames       {result.camera_frames}")
     print(f"inferences          {result.inferences}"
-          f" (invalid {result.invalid_actions})")
+          f" (invalid {result.invalid_actions}, timeouts {result.model_timeouts})")
     print(f"inference latency   p50 {result.inference_latency_ms_p50:.3f} ms,"
           f" p95 {result.inference_latency_ms_p95:.3f} ms")
     print(f"artifacts           {output_dir}")

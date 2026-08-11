@@ -105,6 +105,10 @@ class EpisodeResult:
     camera_frames: int = 0
     inferences: int = 0
     invalid_actions: int = 0
+    # Inferences that missed the model's deadline (spec section 50). Counted
+    # separately from other failures: a slow model is a different problem from
+    # a wrong one.
+    model_timeouts: int = 0
 
     inference_latency_ms_p50: float = 0.0
     inference_latency_ms_p95: float = 0.0
