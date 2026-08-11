@@ -1,5 +1,5 @@
 .PHONY: help env install-carla carla-start carla-stop carla-status smoke episode \
-        episode-grpc model-dummy proto test clean-output
+        episode-grpc model-dummy cut-in proto test clean-output
 
 # Load .env if present so CARLA_ROOT / ports / GPU come from one place.
 ifneq (,$(wildcard .env))
@@ -21,6 +21,7 @@ help:
 	@echo "  make episode        Run one closed-loop episode, policy in-process"
 	@echo "  make model-dummy    Serve the dummy model over gRPC (foreground)"
 	@echo "  make episode-grpc   Run one episode against the gRPC model service"
+	@echo "  make cut-in         Run the Highway Cut-In scenario"
 	@echo "  make proto          Regenerate the gRPC stubs from driving.proto"
 	@echo "  make test           Run unit tests (no CARLA required)"
 	@echo "  make clean-output   Delete generated frames and logs"
@@ -52,6 +53,10 @@ model-dummy:
 
 episode-grpc:
 	$(UV) run python scripts/run_episode.py --model dummy
+
+cut-in:
+	$(UV) run python scripts/run_episode.py --policy dummy \
+		--scenario highway_cut_in --episode-id EP-CUTIN
 
 proto:
 	$(UV) run python -m grpc_tools.protoc -I. \

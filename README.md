@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 3 of 14 complete - Model Gateway.**
+**Phase 4 of 14 complete - Scenario Engine.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -28,10 +28,11 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 - **Phase 3** - models run as separate gRPC services. The same episode gives
   the same trajectory whether the model is in-process or across a socket. See
   [docs/PHASE3.md](docs/PHASE3.md).
+- **Phase 4** - YAML scenarios with a trigger/action registry, and the Highway
+  Cut-In. See [docs/PHASE4.md](docs/PHASE4.md).
 
-The scenario engine, evaluation engine, backend and dashboard land in later
-phases. Nothing in this repo is a placeholder: if a directory exists, the code
-in it runs.
+The evaluation engine, backend and dashboard land in later phases. Nothing in
+this repo is a placeholder: if a directory exists, the code in it runs.
 
 ## Requirements
 
@@ -73,7 +74,9 @@ simulator/
   policy.py                  the DrivingPolicy interface
   worker.py                  the closed-loop episode runner
   carla_client.py            connection and synchronous-world lifecycle
-  ego.py, sensors.py         ego spawning, camera attachment
+  ego.py, sensors.py         ego spawning, camera and collision sensors
+  scenario.py                YAML scenarios: trigger/action registries
+  npc.py                     lane-following controller for scenario vehicles
 model_gateway/
   protocol/driving.proto     the simulator <-> model contract
   server.py                  serve any DrivingPolicy over gRPC
@@ -87,6 +90,8 @@ configs/
   simulator/ego.yaml         ego blueprint and target speed
   simulator/episode.yaml     duration, inference rate, weather
   sensors/front_camera.yaml  800x450 @ 10 FPS front RGB camera
+scenarios/
+  highway_cut_in.yaml        overtake-then-cut-in on the Town04 highway
 scripts/
   install_carla.sh           fetch and unpack the CARLA server package
   carla_server.sh            start / stop / status for the headless server

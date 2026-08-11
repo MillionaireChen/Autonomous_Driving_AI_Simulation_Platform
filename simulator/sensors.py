@@ -80,3 +80,38 @@ class CameraSensor:
             self.actor.destroy()
         except RuntimeError:
             pass
+
+
+class CollisionSensor:
+    """Records collision events on the parent actor.
+
+    Collisions are latched rather than sampled: CARLA reports them as events,
+    and missing one because no tick happened to observe it would make the
+    termination condition unreliable.
+    """
+
+    def __init__(self, world: carla.World, parent: carla.Actor) -> None:
+        bp = world.get_blueprint_library().find("sensor.other.collision")
+        self.actor = world.spawn_actor(bp, carla.Transform(), attach_to=parent)
+        self.events: list[dict[str, Any]] = []
+        self.actor.listen(self._on_event)
+
+    def _on_event(self, event: carla.CollisionEvent) -> None:
+        impulse = event.normal_impulse
+        self.events.append({
+            "frame": event.frame,
+            "other_actor": event.other_actor.type_id if event.other_actor else "unknown",
+            "intensity": (impulse.x ** 2 + impulse.y ** 2 + impulse.z ** 2) ** 0.5,
+        })
+
+    @property
+    def count(self) -> int:
+        return len(self.events)
+
+    def destroy(self) -> None:
+        try:
+            if self.actor.is_listening:
+                self.actor.stop()
+            self.actor.destroy()
+        except RuntimeError:
+            pass

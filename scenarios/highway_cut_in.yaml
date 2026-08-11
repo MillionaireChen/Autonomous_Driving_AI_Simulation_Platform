@@ -1,0 +1,65 @@
+# Highway Cut-In (spec section 24).
+#
+# Tests whether a model copes with a vehicle moving abruptly into its lane.
+# The scenario vehicle overtakes in the neighbouring lane, and once it is far
+# enough ahead it steers across in front of the ego.
+
+id: highway_cut_in_001
+name: Highway Cut-In
+version: "1.0"
+
+map: Town04
+seed: 42
+duration_seconds: 40
+
+weather:
+  cloudiness: 10.0
+  precipitation: 0.0
+  sun_altitude_angle: 60.0
+
+ego:
+  # Spawn point 38 sits on a straight multi-lane stretch of Town04 with a
+  # same-direction lane to the left: 220 m before the road bends, which is
+  # room enough for the overtake and the cut-in.
+  spawn_index: 38
+  target_speed_mps: 15
+
+traffic:
+  vehicles: 0
+  # Background traffic is kept this far from the ego at spawn so it cannot
+  # block the manoeuvre under test.
+  keep_clear_m: 60
+
+scenario_vehicle:
+  blueprint: vehicle.audi.tt
+  relative_lane: left
+  # Negative means the NPC starts BEHIND the ego.
+  #
+  # Spec section 25 describes it as starting 25 m ahead at 17 m/s while the
+  # ego does 15 m/s. Those numbers cannot produce a cut-in: a faster vehicle
+  # that is already ahead only pulls further away, so a 12 m trigger never
+  # fires. Starting it behind and letting it overtake is the manoeuvre the
+  # scenario is actually describing, and it triggers regardless of how fast
+  # the ego's policy chooses to drive.
+  initial_longitudinal_distance_m: -25
+  speed_mps: 17
+
+trigger:
+  type: relative_distance
+  # Fires once the NPC has built up this much of a lead over the ego, measured
+  # along the ego's heading rather than straight-line.
+  #
+  # at_least, not at_most: the NPC is overtaking from behind, so the gap grows
+  # through zero. With at_most it would satisfy the condition the moment it
+  # drew level and cut in across the ego's bonnet instead of in front of it.
+  distance_m: 12
+  comparison: at_least
+
+action:
+  type: cut_in
+  target_lane: ego_lane
+  duration_seconds: 2.0
+
+termination:
+  collision: true
+  timeout_seconds: 40

@@ -57,6 +57,8 @@ def main() -> int:
                         help="run a policy in this process")
     source.add_argument("--model", help="connect to a model from configs/models.yaml")
     parser.add_argument("--episode-id", default="EP-0001")
+    parser.add_argument("--scenario", default=None,
+                        help="scenario name or path, e.g. highway_cut_in")
     parser.add_argument("--duration", type=float, default=None,
                         help="override duration_seconds from episode.yaml")
     parser.add_argument("--model-timeout-ms", type=float, default=None)
@@ -81,18 +83,35 @@ def main() -> int:
     output_dir = Path(args.output) if args.output else \
         REPO_ROOT / "output" / "episodes" / args.episode_id
 
+    scenario = None
+    if args.scenario:
+        from simulator.scenario import load_scenario
+
+        scenario = load_scenario(args.scenario)
+        if args.duration is not None:
+            scenario.duration_seconds = args.duration
+
     worker = SimulationWorker(sim_config, camera_config, ego_config, episode_config)
 
+    duration = scenario.duration_seconds if scenario else episode_config["duration_seconds"]
     print(f"episode {args.episode_id}: policy={policy.name} ({source_label}) "
-          f"duration={episode_config['duration_seconds']}s "
+          f"duration={duration}s "
           f"sim={worker.sim_hz:.0f}Hz inference={worker.sim_hz / worker.inference_interval:.0f}Hz")
+    if scenario:
+        print(f"scenario {scenario.id} ({scenario.name}) map={scenario.map} seed={scenario.seed}")
     if policy.required_sensors:
         print(f"model requires sensors: {', '.join(policy.required_sensors)}")
 
-    result = worker.run_episode(policy, episode_id=args.episode_id, output_dir=output_dir)
+    result = worker.run_episode(policy, episode_id=args.episode_id,
+                                output_dir=output_dir, scenario=scenario)
 
-    print(f"\nstatus              {result.status}")
+    print(f"\nstatus              {result.status} ({result.termination_reason})")
     print(f"map                 {result.map_name}")
+    if scenario:
+        triggered = (f"YES at {result.scenario_triggered_at:.2f}s"
+                     if result.scenario_triggered else "NO")
+        print(f"cut-in triggered    {triggered}")
+        print(f"collisions          {result.collisions}")
     print(f"ticks               {result.ticks} ({result.simulated_seconds:.1f}s simulated"
           f" in {result.wall_seconds:.1f}s wall)")
     print(f"distance            {result.distance_m:.1f} m")

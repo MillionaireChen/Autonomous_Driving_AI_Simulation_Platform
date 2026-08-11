@@ -93,6 +93,8 @@ class EpisodeResult:
     status: str = "UNKNOWN"
     map_name: str = ""
     policy_name: str = ""
+    scenario_id: str = ""
+    termination_reason: str = ""
 
     ticks: int = 0
     simulated_seconds: float = 0.0
@@ -113,7 +115,12 @@ class EpisodeResult:
     inference_latency_ms_p50: float = 0.0
     inference_latency_ms_p95: float = 0.0
 
+    collisions: int = 0
+    scenario_triggered: bool = False
+    scenario_triggered_at: Optional[float] = None
+
     versions: dict = field(default_factory=dict)
+    events: list = field(default_factory=list)
 
 
 def percentile(values: list[float], pct: float) -> float:
