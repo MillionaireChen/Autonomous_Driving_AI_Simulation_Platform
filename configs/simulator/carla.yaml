@@ -1,0 +1,23 @@
+# CARLA server / client connection settings.
+# Consumed by scripts/carla_smoke_test.py and (from Phase 2) the simulation worker.
+
+server:
+  host: 127.0.0.1
+  port: 2000
+  timeout_seconds: 30.0
+
+world:
+  map: Town04
+  # Synchronous mode with a fixed timestep is mandatory (spec section 17/18):
+  # 0.05 s == 20 simulation steps per second.
+  synchronous_mode: true
+  fixed_delta_seconds: 0.05
+
+rendering:
+  quality_level: Epic
+  # Headless box: no DISPLAY, so the server must render off-screen via Vulkan.
+  off_screen: true
+
+# GPU isolation (spec section 4): never let a process grab all four cards.
+gpu:
+  device: 0

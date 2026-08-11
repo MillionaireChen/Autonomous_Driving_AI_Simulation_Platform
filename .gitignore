@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# uv environment lives on local disk, never in the repo
+.env
+
+# CARLA server package (~18 GB, installed outside the repo)
+CARLA_*/
+*.tar.gz
+
+# Runtime artifacts
+logs/
+output/
+dataset/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

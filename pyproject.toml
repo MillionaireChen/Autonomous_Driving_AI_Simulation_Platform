@@ -1,0 +1,24 @@
+[project]
+name = "autonomous-driving-ai-arena"
+version = "0.1.0"
+description = "A GPU-accelerated closed-loop simulation platform for testing autonomous driving models against interactive traffic scenarios using CARLA."
+readme = "README.md"
+# The CARLA wheel is published for cp310/cp311/cp312 as manylinux_2_31.
+# This host is Ubuntu 20.04 (glibc 2.31), so 3.11 is the verified match.
+requires-python = ">=3.11,<3.12"
+
+dependencies = [
+    "carla==0.9.16",
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+    "pillow>=10.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv]
+# The virtualenv lives on local disk (see .env.example); /home is a slow NFS mount.
+package = false

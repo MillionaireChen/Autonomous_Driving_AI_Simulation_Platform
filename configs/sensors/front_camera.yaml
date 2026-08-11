@@ -1,0 +1,15 @@
+# Front RGB camera (spec section 21).
+# 800x450 at 10 FPS is enough for the web dashboard and the first driving models.
+
+type: rgb
+width: 800
+height: 450
+fov: 90
+sensor_tick: 0.1
+
+# Mounting point relative to the ego vehicle, in metres / degrees.
+transform:
+  x: 1.5
+  y: 0.0
+  z: 2.2
+  pitch: -5
