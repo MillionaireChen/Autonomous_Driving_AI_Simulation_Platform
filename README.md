@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 10 of 14 complete - PID baseline.**
+**Phase 11 of 14 complete - learned driving model.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -43,8 +43,12 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 - **Phase 10** - a baseline that actually drives: pure pursuit plus IDM
   car-following, which passes the scenario the dummy fails.
   See [docs/PHASE10.md](docs/PHASE10.md).
+- **Phase 11** - an end-to-end neural policy (ResNet-18 + speed -> control and
+  a 2 s path), trained on 23,639 expert samples, plus `TRAJECTORY_POLICY` so
+  waypoint-output models can drive. See [docs/PHASE11.md](docs/PHASE11.md).
 
-Learned models and the model arena land in later phases. Nothing in
+The model arena, parallel simulation and batch evaluation land in later
+phases. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ![dashboard](docs/images/dashboard-result.png)
@@ -297,11 +301,56 @@ Three longitudinal controllers were measured before settling on IDM:
 </details>
 
 <details>
+<summary><b>Phase 11 - a learned policy, and a metric that lied</b></summary>
+
+23,639 samples from 60 expert episodes over 12 spawn points and 5 weathers:
+
+```
+23,639 samples in 35.8 min -> dataset/town04_pid   (736 MB)
+
+22626 samples: 19199 train, 3427 validation
+held-out episodes: DS-0051 ... DS-0059      <- whole episodes, never random frames
+epoch  5/15  val 0.1324 (ctrl 0.0278, wp 0.2615, steer MAE 0.0092)
+best validation loss 0.1324 after 13.9 min
+```
+
+Closed loop, same scenario and seed for every model:
+
+| model | result | score | distance | route | ticks survived |
+|---|---|---|---|---|---|
+| DummyAgent | FAIL | 0.0 | 253.6 m | 40.6% | 672 |
+| cnn_il (control head) | FAIL | 0.0 | **76.1 m** | 12.3% | 158 |
+| cnn_il (trajectory head) | FAIL | 0.0 | **260.7 m** | 42.3% | 470 |
+| PIDAgent (the expert) | PASS | 82.7 | 360.8 m | 58.4% | 800 |
+
+Validation steer MAE was 0.005, which looks excellent. The control head had
+collapsed to a constant:
+
+```
+control head   steer: mean 0.010   min 0.000   max 0.011      <- a constant
+trajectory     steer: mean -0.0081 min -0.0458 max 0.0086     <- actually steering
+```
+
+Steering labels on a near-straight highway have a standard deviation of 0.009,
+so L1 loss is minimised by emitting their mean, and the metric rewards it. The
+trajectory head, whose labels carry real spatial variance, does not degenerate
+the same way and drives 3.4x further.
+
+It still does not finish - twelve lane invasions and a collision at 23.5 s.
+That is covariate shift, the standard failure of behaviour cloning, and the fix
+is DAgger rather than more of the same data.
+
+Real inference latency at last: **p50 13.5 ms, p95 21.0 ms** for a ResNet-18
+forward pass across gRPC. Every earlier model reported microseconds because it
+was arithmetic.
+</details>
+
+<details>
 <summary><b>Test suite</b></summary>
 
 ```
 $ make test
-122 passed in 2.53s
+136 passed in 3.31s
 ```
 
 No CARLA required - the suite covers the safety envelope, the gRPC protocol

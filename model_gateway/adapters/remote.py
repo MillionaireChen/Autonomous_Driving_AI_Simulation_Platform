@@ -23,7 +23,9 @@ import numpy as np
 from model_gateway.protocol import driving_pb2 as pb
 from model_gateway.protocol import driving_pb2_grpc as pb_grpc
 from simulator.policy import DrivingPolicy
-from simulator.types import Observation, VehicleControlAction
+from simulator.types import (
+    Observation, TrajectoryAction, TrajectoryPoint, VehicleControlAction,
+)
 
 
 class ModelTimeout(RuntimeError):
@@ -95,7 +97,7 @@ class RemoteModelAdapter(DrivingPolicy):
         if not response.ok:
             raise RuntimeError(f"model refused reset: {response.detail}")
 
-    def infer(self, observation: Observation) -> VehicleControlAction:
+    def infer(self, observation: Observation):
         request = pb.InferRequest(observation=self._to_proto(observation))
         try:
             response = self._stub.Infer(request, timeout=self.timeout_s)
@@ -106,6 +108,16 @@ class RemoteModelAdapter(DrivingPolicy):
                     f"{self.name} exceeded {self.timeout_s * 1000:.0f} ms"
                 ) from exc
             raise
+
+        if response.WhichOneof("action") == "trajectory":
+            return TrajectoryAction(waypoints=[
+                TrajectoryPoint(
+                    x=p.x, y=p.y,
+                    target_speed_mps=p.target_speed_mps or None,
+                    timestamp_s=p.timestamp_s or None,
+                )
+                for p in response.trajectory.waypoints
+            ])
 
         control = response.control
         return VehicleControlAction(

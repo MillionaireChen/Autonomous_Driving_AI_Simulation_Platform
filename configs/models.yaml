@@ -19,3 +19,11 @@ models:
     type: CONTROL_POLICY
     endpoint: localhost:51002
     timeout_ms: 500
+
+  - id: cnn_il
+    name: CNN Imitation Learning
+    type: CONTROL_POLICY
+    endpoint: localhost:51003
+    timeout_ms: 500
+    # Inference runs on the same card as CARLA; both fit comfortably.
+    gpu: 0

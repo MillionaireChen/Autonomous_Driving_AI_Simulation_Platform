@@ -31,6 +31,7 @@ import carla
 from PIL import Image as PILImage
 
 from simulator import carla_client, ego as ego_mod
+from simulator.control import TrajectoryController
 from simulator.metrics import EvaluationEngine
 from simulator.policy import DrivingPolicy
 from simulator.route import build_route
@@ -46,6 +47,7 @@ from simulator.types import (
     EpisodeResult,
     LeadVehicle,
     Observation,
+    TrajectoryAction,
     VehicleControlAction,
     percentile,
     safety_fallback,
@@ -211,6 +213,7 @@ class SimulationWorker:
         route = None
         final_pose = None
         runner = ScenarioRunner(scenario) if scenario else None
+        trajectory_controller = TrajectoryController()
         engine = (
             EvaluationEngine(self.evaluation_config) if self.evaluation_config else None
         )
@@ -310,6 +313,18 @@ class SimulationWorker:
                             result.invalid_actions += 1
                         latencies.append((time.perf_counter() - started) * 1000.0)
                         result.inferences += 1
+
+                        # A model may answer with waypoints instead of pedals
+                        # (spec sections 13/14). Converting here means the
+                        # model never learns anything about this vehicle, and
+                        # the safety envelope applies to both kinds equally.
+                        if isinstance(proposed, TrajectoryAction):
+                            if proposed.is_finite():
+                                proposed = trajectory_controller.control(
+                                    proposed, obs.speed_mps, self.fixed_delta
+                                )
+                            else:
+                                proposed = None
 
                         # The simulator, not the model, decides what is legal.
                         if proposed is None or not proposed.is_finite():

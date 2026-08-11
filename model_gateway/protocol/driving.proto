@@ -5,10 +5,9 @@
 // another GPU, in another container or on another machine, without the
 // simulation worker knowing the difference.
 //
-// Only CONTROL_POLICY is implemented today. TRAJECTORY_POLICY is named in the
-// enum because the model type is part of the handshake, but the trajectory
-// message and its controller arrive with the phase that can actually execute
-// a trajectory.
+// Both CONTROL_POLICY and TRAJECTORY_POLICY are implemented: a model answers
+// Infer with either pedals or a path, and the simulator executes whichever it
+// gets.
 
 syntax = "proto3";
 
@@ -121,6 +120,26 @@ message InferRequest {
   Observation observation = 1;
 }
 
+// A point on a planned path, in the ego frame at the time of planning:
+// forward is +x, right is +y, metres.
+message TrajectoryPoint {
+  double x = 1;
+  double y = 2;
+  double target_speed_mps = 3;
+  double timestamp_s = 4;
+}
+
+message Trajectory {
+  repeated TrajectoryPoint waypoints = 1;
+}
+
 message InferResponse {
-  VehicleControl control = 1;
+  // A model answers with pedals or with a path, never both. Waypoint output is
+  // what TCP, Transfuser, InterFuser and LAV all emit; the simulator's
+  // trajectory controller turns it into control, so the model needs to know
+  // nothing about this vehicle.
+  oneof action {
+    VehicleControl control = 1;
+    Trajectory trajectory = 2;
+  }
 }

@@ -22,7 +22,9 @@ import numpy as np
 from model_gateway.protocol import driving_pb2 as pb
 from model_gateway.protocol import driving_pb2_grpc as pb_grpc
 from simulator.policy import DrivingPolicy
-from simulator.types import LeadVehicle, Observation, Pose
+from simulator.types import (
+    LeadVehicle, Observation, Pose, TrajectoryAction,
+)
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +86,9 @@ class DrivingModelServicer(pb_grpc.DrivingModelServicer):
         return pb.ModelInfo(
             id=self.model_id,
             name=self.model_name,
-            type=pb.ModelType.CONTROL_POLICY,
+            type=(pb.ModelType.TRAJECTORY_POLICY
+                  if getattr(self.policy, "model_type", "") == "TRAJECTORY_POLICY"
+                  else pb.ModelType.CONTROL_POLICY),
             required_sensors=list(self.policy.required_sensors),
             version=self.version,
         )
@@ -109,6 +113,16 @@ class DrivingModelServicer(pb_grpc.DrivingModelServicer):
             log.exception("inference failed")
             context.abort(grpc.StatusCode.INTERNAL, f"inference failed: {exc}")
             raise AssertionError("unreachable")  # abort() always raises
+
+        if isinstance(action, TrajectoryAction):
+            response = pb.InferResponse()
+            for point in action.waypoints:
+                response.trajectory.waypoints.add(
+                    x=point.x, y=point.y,
+                    target_speed_mps=point.target_speed_mps or 0.0,
+                    timestamp_s=point.timestamp_s or 0.0,
+                )
+            return response
 
         return pb.InferResponse(control=pb.VehicleControl(
             throttle=action.throttle,

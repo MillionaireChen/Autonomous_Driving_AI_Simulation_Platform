@@ -26,3 +26,7 @@ dataset/
 frontend/node_modules
 frontend/.next
 frontend/next-env.d.ts
+
+# Trained weights and collected data are regenerated, not versioned
+models/il/checkpoints/
+dataset/

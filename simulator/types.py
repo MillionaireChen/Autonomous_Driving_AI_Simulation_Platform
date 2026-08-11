@@ -99,6 +99,39 @@ class VehicleControlAction:
         )
 
 
+@dataclass
+class TrajectoryPoint:
+    """A point on a planned path, in the ego's frame at the time of planning.
+
+    Forward is +x, right is +y, metres. Ego-relative rather than world
+    coordinates because that is what a network can actually predict, and it
+    stays valid if the pose estimate is off.
+    """
+
+    x: float
+    y: float
+    target_speed_mps: Optional[float] = None
+    timestamp_s: Optional[float] = None
+
+
+@dataclass
+class TrajectoryAction:
+    """Where to go, rather than what to do with the pedals (spec section 13).
+
+    This is the output shape of most published driving models - TCP,
+    Transfuser, InterFuser, LAV all emit waypoints. A controller in the
+    simulator turns it into steering and pedals, so the model never has to know
+    anything about this vehicle.
+    """
+
+    waypoints: list[TrajectoryPoint] = field(default_factory=list)
+
+    def is_finite(self) -> bool:
+        return all(
+            math.isfinite(p.x) and math.isfinite(p.y) for p in self.waypoints
+        ) and len(self.waypoints) > 0
+
+
 # Applied when a policy fails: coast and brake gently, keep the wheel where it
 # was rather than jerking it straight (spec section 50).
 def safety_fallback(previous_steer: float = 0.0) -> VehicleControlAction:

@@ -72,8 +72,8 @@ Leaving CARLA running holds GPU 0 from other users.
 | 8 | Bird-Eye View | done |
 | 9 | Replay | done |
 | 10 | PID / rule-based baseline | done |
-| 11 | Learned driving model | **next** |
-| 12 | Model Arena (A vs B) | todo |
+| 11 | Learned driving model | done |
+| 12 | Model Arena (A vs B) | **next** |
 | 13 | Parallel simulation (2 CARLA instances) | todo |
 | 14 | Batch evaluation over seeds | todo |
 

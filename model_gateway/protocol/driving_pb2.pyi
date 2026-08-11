@@ -152,8 +152,28 @@ class InferRequest(_message.Message):
     observation: Observation
     def __init__(self, observation: _Optional[_Union[Observation, _Mapping]] = ...) -> None: ...
 
+class TrajectoryPoint(_message.Message):
+    __slots__ = ("x", "y", "target_speed_mps", "timestamp_s")
+    X_FIELD_NUMBER: _ClassVar[int]
+    Y_FIELD_NUMBER: _ClassVar[int]
+    TARGET_SPEED_MPS_FIELD_NUMBER: _ClassVar[int]
+    TIMESTAMP_S_FIELD_NUMBER: _ClassVar[int]
+    x: float
+    y: float
+    target_speed_mps: float
+    timestamp_s: float
+    def __init__(self, x: _Optional[float] = ..., y: _Optional[float] = ..., target_speed_mps: _Optional[float] = ..., timestamp_s: _Optional[float] = ...) -> None: ...
+
+class Trajectory(_message.Message):
+    __slots__ = ("waypoints",)
+    WAYPOINTS_FIELD_NUMBER: _ClassVar[int]
+    waypoints: _containers.RepeatedCompositeFieldContainer[TrajectoryPoint]
+    def __init__(self, waypoints: _Optional[_Iterable[_Union[TrajectoryPoint, _Mapping]]] = ...) -> None: ...
+
 class InferResponse(_message.Message):
-    __slots__ = ("control",)
+    __slots__ = ("control", "trajectory")
     CONTROL_FIELD_NUMBER: _ClassVar[int]
+    TRAJECTORY_FIELD_NUMBER: _ClassVar[int]
     control: VehicleControl
-    def __init__(self, control: _Optional[_Union[VehicleControl, _Mapping]] = ...) -> None: ...
+    trajectory: Trajectory
+    def __init__(self, control: _Optional[_Union[VehicleControl, _Mapping]] = ..., trajectory: _Optional[_Union[Trajectory, _Mapping]] = ...) -> None: ...
