@@ -58,6 +58,7 @@ class ExperimentIn(BaseModel):
     model_id: str
     scenario_id: str
     seed: int = 42
+    record_frames: bool = False
 
 
 class ExperimentOut(BaseModel):
@@ -67,6 +68,7 @@ class ExperimentOut(BaseModel):
     model_id: str
     scenario_id: str
     seed: int
+    record_frames: bool = False
     status: str
     score: Optional[float] = None
     error: Optional[str] = None

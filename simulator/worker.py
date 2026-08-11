@@ -126,6 +126,7 @@ class SimulationWorker:
         scenario: Optional[ScenarioConfig] = None,
         stop_flag: Optional[Any] = None,
         on_tick: Optional[Callable[[dict[str, Any]], None]] = None,
+        record_frames: bool = False,
     ) -> EpisodeResult:
         server = self.sim_config["server"]
         world_cfg = self.sim_config["world"]
@@ -155,7 +156,17 @@ class SimulationWorker:
         )
         latencies: list[float] = []
         telemetry: list[dict[str, Any]] = []
+        frames_index: list[dict[str, Any]] = []
         wall_start = time.time()
+
+        # Frames go to disk, never into the database (spec section 42). At
+        # ~27 KB and 10 Hz that is about 9 MB for a 33 s episode, so recording
+        # is opt-in rather than always on.
+        frame_dir = None
+        if record_frames and output_dir is not None:
+            frame_dir = output_dir / "camera_front"
+            frame_dir.mkdir(parents=True, exist_ok=True)
+        frame_index = 0
 
         client = carla_client.connect(
             server["host"], server["port"], float(server["timeout_seconds"])
@@ -231,6 +242,7 @@ class SimulationWorker:
                 speed_sum = 0.0
                 last_frame_sent = -1
                 last_event_sent = 0
+                jpeg = None
                 route_command = self.episode_config.get("route_command")
                 terminate_on_collision = bool(
                     scenario.termination.get("collision", True)
@@ -335,20 +347,40 @@ class SimulationWorker:
                     row["yaw"] = round(pose.yaw, 2)
                     telemetry.append(row)
 
+                    # -- encode once, use twice (stream and disk) -----------
+                    # Only when the camera actually produced a frame, so a
+                    # 10 Hz camera does not cost 20 Hz of JPEG.
+                    jpeg: Optional[bytes] = None
+                    if (on_tick is not None or frame_dir is not None) \
+                            and camera is not None \
+                            and camera.frame_count != last_frame_sent:
+                        last_frame_sent = camera.frame_count
+                        frame = camera.latest
+                        if frame is not None:
+                            buffer = io.BytesIO()
+                            PILImage.fromarray(frame).save(
+                                buffer, format="JPEG", quality=70)
+                            jpeg = buffer.getvalue()
+
+                    # -- frame recording (spec sections 42/43) --------------
+                    if jpeg is not None and frame_dir is not None:
+                        frame_index += 1
+                        name = f"{frame_index:06d}.jpg"
+                        (frame_dir / name).write_bytes(jpeg)
+                        row["camera_front"] = f"camera_front/{name}"
+                        frames_index.append({
+                            "index": frame_index,
+                            "tick": tick,
+                            "sim_time": round(sim_time, 3),
+                            "path": row["camera_front"],
+                        })
+
                     # -- live stream (spec sections 53/54) ------------------
                     if on_tick is not None:
                         message = {"type": "tick", "episode_id": episode_id, **row}
-                        # Only encode a frame when the camera actually produced
-                        # one, so a 10 Hz camera does not cost 20 Hz of JPEG.
-                        if camera is not None and camera.frame_count != last_frame_sent:
-                            last_frame_sent = camera.frame_count
-                            frame = camera.latest
-                            if frame is not None:
-                                buffer = io.BytesIO()
-                                PILImage.fromarray(frame).save(
-                                    buffer, format="JPEG", quality=70)
-                                message["camera_front"] = base64.b64encode(
-                                    buffer.getvalue()).decode("ascii")
+                        if jpeg is not None:
+                            message["camera_front"] = base64.b64encode(
+                                jpeg).decode("ascii")
                         if runner is not None and len(runner.events) != last_event_sent:
                             message["events"] = runner.events[last_event_sent:]
                             last_event_sent = len(runner.events)
@@ -431,5 +463,8 @@ class SimulationWorker:
             with (output_dir / "events.jsonl").open("w") as fh:
                 for event in result.events:
                     fh.write(json.dumps(event) + "\n")
+            if frames_index:
+                (output_dir / "frames.json").write_text(
+                    json.dumps(frames_index, indent=2))
 
         return result

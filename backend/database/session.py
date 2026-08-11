@@ -57,6 +57,37 @@ def create_all() -> None:
     Base.metadata.create_all(get_engine())
 
 
+def migrate() -> str:
+    """Bring the database up to date, whether it is new or pre-existing.
+
+    A fresh database is built straight from the models and stamped at head - no
+    point replaying history to arrive at the schema we already have. An
+    existing one is upgraded through Alembic, so results recorded by earlier
+    phases survive a schema change instead of being dropped.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+
+    config = Config(str(Path(__file__).resolve().parent.parent.parent / "alembic.ini"))
+    config.set_main_option("script_location", "backend/migrations")
+
+    if not tables:
+        Base.metadata.create_all(engine)
+        command.stamp(config, "head")
+        return "created"
+
+    if "alembic_version" not in tables:
+        # Predates migrations: mark it as the baseline, then upgrade.
+        command.stamp(config, "0001")
+    command.upgrade(config, "head")
+    return "upgraded"
+
+
 def session_factory() -> sessionmaker:
     get_engine()
     assert _SessionFactory is not None

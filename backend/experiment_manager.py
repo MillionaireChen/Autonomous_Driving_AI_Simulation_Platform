@@ -24,7 +24,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.database.models import Episode, Event, Experiment, Metric, Model, Scenario
+from backend.database.models import (
+    Episode, Event, Experiment, Frame, Metric, Model, Scenario,
+)
 from simulator.stream import Broadcaster
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -88,7 +90,8 @@ class ExperimentManager:
         db.commit()
 
     # -- lifecycle --------------------------------------------------------
-    def create(self, db: Session, model_id: str, scenario_id: str, seed: int) -> Experiment:
+    def create(self, db: Session, model_id: str, scenario_id: str, seed: int,
+               record_frames: bool = False) -> Experiment:
         if db.get(Model, model_id) is None:
             raise LookupError(f"unknown model {model_id!r}")
         if db.get(Scenario, scenario_id) is None:
@@ -99,6 +102,7 @@ class ExperimentManager:
             model_id=model_id,
             scenario_id=scenario_id,
             seed=seed,
+            record_frames=record_frames,
             status="CREATED",
             versions={"git_commit": git_commit()},
         )
@@ -186,6 +190,7 @@ class ExperimentManager:
                 output_dir=output_dir, scenario=scenario,
                 stop_flag=stop_flag,
                 on_tick=stream.publish if stream is not None else None,
+                record_frames=bool(experiment.record_frames),
             )
 
             self._persist(db, experiment, result, output_dir)
@@ -257,6 +262,20 @@ class ExperimentManager:
                 type=str(event.get("type", "")),
                 data=event.get("data", {}),
             ))
+
+        # Frame metadata only; the JPEGs stay on disk (spec section 42).
+        frames_file = output_dir / "frames.json"
+        if frames_file.exists():
+            import json as _json
+
+            for entry in _json.loads(frames_file.read_text()):
+                db.add(Frame(
+                    experiment_id=experiment.id,
+                    index=int(entry["index"]),
+                    tick=int(entry["tick"]),
+                    sim_time=float(entry["sim_time"]),
+                    path=str(entry["path"]),
+                ))
 
         # Flatten metrics.json so results are queryable and comparable.
         metrics_file = output_dir / "metrics.json"

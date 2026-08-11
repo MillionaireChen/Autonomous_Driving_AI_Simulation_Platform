@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 8 of 14 complete - Bird-Eye View.**
+**Phase 9 of 14 complete - Replay.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -38,8 +38,10 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   stop from the browser. See [docs/PHASE7.md](docs/PHASE7.md).
 - **Phase 8** - canvas bird-eye view drawn from telemetry.
   See [docs/PHASE8.md](docs/PHASE8.md).
+- **Phase 9** - frame recording, Alembic migrations and a replay page with
+  play/pause/scrub. See [docs/PHASE9.md](docs/PHASE9.md).
 
-Replay, learned models and the model arena land in later phases. Nothing in
+Learned models and the model arena land in later phases. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ![dashboard](docs/images/dashboard-result.png)
@@ -219,11 +221,45 @@ captured docs/images/dashboard-result.png
 </details>
 
 <details>
+<summary><b>Phase 9 - replay</b></summary>
+
+```
+$ curl localhost:8000/api/experiments/EXP-0009/replay
+experiment   EXP-0009 | result FAIL | score 0.0
+ticks        672 | telemetry rows 672
+has_frames   True | frame count 337
+events       [(0.0, 'EPISODE_STARTED'), (6.05, 'CUT_IN_TRIGGERED'),
+              (8.05, 'CUT_IN_COMPLETED'), (33.55, 'COLLISION')]
+
+$ ls output/experiments/EXP-0009/camera_front | wc -l
+337
+$ du -sh output/experiments/EXP-0009
+10M
+
+$ uv run python scripts/capture_replay.py EXP-0009
+recorded frame rendered
+after 6 s of playback: tick 120 / 671
+```
+
+120 ticks in 6 seconds is 20 ticks/s - real-time playback of a 20 Hz recording.
+
+Schema changes go through Alembic rather than dropping the database:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Frame recording
+migrate -> upgraded
+experiments columns include record_frames: True
+frames table exists: True
+existing experiments preserved: 8
+```
+</details>
+
+<details>
 <summary><b>Test suite</b></summary>
 
 ```
 $ make test
-120 passed in 2.13s
+120 passed in 2.42s
 ```
 
 No CARLA required - the suite covers the safety envelope, the gRPC protocol
@@ -240,6 +276,7 @@ arithmetic, and the experiment state machine.
 | Python | 3.11 (the CARLA wheel is `manylinux_2_31`, cp310-cp312) |
 | CARLA | 0.9.16 packaged release, ~8 GB download / ~18 GB unpacked |
 | Database | PostgreSQL 16 - installed by `uv` via the `pgserver` wheel, no root |
+| Node | 22 (dashboard only; installed to local disk, see `scripts/fe-install.sh`) |
 | Tooling | [uv](https://github.com/astral-sh/uv) |
 
 You do **not** need Unreal Engine, an Epic Games account, or a CARLA source

@@ -22,7 +22,7 @@ from fastapi import FastAPI  # noqa: E402
 from backend.api.routes import router  # noqa: E402
 from backend.api.websocket import router as ws_router  # noqa: E402
 from backend.database.models import Model, Scenario  # noqa: E402
-from backend.database.session import create_all, session_factory  # noqa: E402
+from backend.database.session import migrate, session_factory  # noqa: E402
 from backend.experiment_manager import ExperimentManager  # noqa: E402
 
 SCENARIO_DIR = REPO_ROOT / "scenarios"
@@ -67,8 +67,9 @@ def sync_registries() -> tuple[int, int]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_all()
+    action = migrate()
     models, scenarios = sync_registries()
+    print(f"database {action}", flush=True)
     app.state.manager = ExperimentManager(session_factory())
     print(f"registry synced: {models} model(s), {scenarios} scenario(s)", flush=True)
     yield

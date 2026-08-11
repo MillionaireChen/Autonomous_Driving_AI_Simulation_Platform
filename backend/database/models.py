@@ -75,6 +75,7 @@ class Experiment(Base):
     model_id: Mapped[str] = mapped_column(ForeignKey("models.id"))
     scenario_id: Mapped[str] = mapped_column(ForeignKey("scenarios.id"))
     seed: Mapped[int] = mapped_column(Integer, default=42)
+    record_frames: Mapped[bool] = mapped_column(Boolean, default=False)
 
     status: Mapped[str] = mapped_column(String(16), default="CREATED", index=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -96,6 +97,9 @@ class Experiment(Base):
         back_populates="experiment", cascade="all, delete-orphan"
     )
     metrics: Mapped[list["Metric"]] = relationship(
+        back_populates="experiment", cascade="all, delete-orphan"
+    )
+    frames: Mapped[list["Frame"]] = relationship(
         back_populates="experiment", cascade="all, delete-orphan"
     )
 
@@ -134,6 +138,24 @@ class Episode(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     experiment: Mapped[Experiment] = relationship(back_populates="episodes")
+
+
+class Frame(Base):
+    """Metadata for one recorded camera frame (spec sections 38, 42).
+
+    The image itself is a JPEG on disk; only its location is stored here.
+    """
+
+    __tablename__ = "frames"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id"), index=True)
+    index: Mapped[int] = mapped_column(Integer)
+    tick: Mapped[int] = mapped_column(Integer)
+    sim_time: Mapped[float] = mapped_column(Float)
+    path: Mapped[str] = mapped_column(String(256))
+
+    experiment: Mapped[Experiment] = relationship(back_populates="frames")
 
 
 class Event(Base):

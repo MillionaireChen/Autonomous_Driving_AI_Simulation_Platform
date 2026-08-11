@@ -230,6 +230,12 @@ export default function Dashboard() {
                 </div>
                 <div>route {episode.route_completion.toFixed(1)}%</div>
                 <div className="muted">{episode.termination_reason}</div>
+                <a
+                  href={`/replay/${episode.experiment_id}`}
+                  style={{ color: "var(--accent)" }}
+                >
+                  open replay -&gt;
+                </a>
               </div>
             </div>
           )}
