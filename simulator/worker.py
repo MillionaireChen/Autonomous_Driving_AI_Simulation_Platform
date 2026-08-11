@@ -121,6 +121,7 @@ class SimulationWorker:
         episode_id: str = "EP-0001",
         output_dir: Optional[Path] = None,
         scenario: Optional[ScenarioConfig] = None,
+        stop_flag: Optional[Any] = None,
     ) -> EpisodeResult:
         server = self.sim_config["server"]
         world_cfg = self.sim_config["world"]
@@ -231,6 +232,20 @@ class SimulationWorker:
 
                 for tick in range(max_ticks):
                     sim_time = tick * self.fixed_delta
+
+                    # Emergency stop (spec section 73): cut throttle, full
+                    # brake, then end the episode. The model does not get a
+                    # say - this is the simulator overriding it.
+                    if stop_flag is not None and stop_flag.is_set():
+                        vehicle.apply_control(
+                            carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0)
+                        )
+                        world.tick()
+                        result.termination_reason = "STOPPED"
+                        if runner is not None:
+                            runner.log_event(sim_time, "EMERGENCY_STOP", {})
+                        break
+
                     obs = self._observe(vehicle, camera, tick, sim_time, route_command)
 
                     # Ask the policy only at its own rate; reuse in between.

@@ -1,5 +1,5 @@
 .PHONY: help env install-carla carla-start carla-stop carla-status smoke episode \
-        episode-grpc model-dummy cut-in proto test clean-output
+        episode-grpc model-dummy cut-in proto api test clean-output
 
 # Load .env if present so CARLA_ROOT / ports / GPU come from one place.
 ifneq (,$(wildcard .env))
@@ -8,9 +8,11 @@ export
 endif
 
 UV ?= uv
+API_HOST ?= 127.0.0.1
+API_PORT ?= 8000
 
 help:
-	@echo "Autonomous Driving AI Arena - Phase 1 targets"
+	@echo "Autonomous Driving AI Arena"
 	@echo ""
 	@echo "  make env            Create the uv virtualenv and install dependencies"
 	@echo "  make install-carla  Download and unpack the CARLA server (~8 GB download)"
@@ -22,6 +24,7 @@ help:
 	@echo "  make model-dummy    Serve the dummy model over gRPC (foreground)"
 	@echo "  make episode-grpc   Run one episode against the gRPC model service"
 	@echo "  make cut-in         Run the Highway Cut-In scenario"
+	@echo "  make api            Serve the REST API on :8000 (starts PostgreSQL)"
 	@echo "  make proto          Regenerate the gRPC stubs from driving.proto"
 	@echo "  make test           Run unit tests (no CARLA required)"
 	@echo "  make clean-output   Delete generated frames and logs"
@@ -57,6 +60,9 @@ episode-grpc:
 cut-in:
 	$(UV) run python scripts/run_episode.py --policy dummy \
 		--scenario highway_cut_in --episode-id EP-CUTIN
+
+api:
+	$(UV) run uvicorn backend.main:app --host $(API_HOST) --port $(API_PORT)
 
 proto:
 	$(UV) run python -m grpc_tools.protoc -I. \

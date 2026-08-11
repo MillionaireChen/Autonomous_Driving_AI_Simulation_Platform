@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 5 of 14 complete - Evaluation Engine.**
+**Phase 6 of 14 complete - Backend.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -32,8 +32,10 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   Cut-In. See [docs/PHASE4.md](docs/PHASE4.md).
 - **Phase 5** - deterministic evaluation: collision, TTC, lane invasion, route
   completion, comfort and a 0-100 score. See [docs/PHASE5.md](docs/PHASE5.md).
+- **Phase 6** - REST API, PostgreSQL and an experiment state machine. See
+  [docs/PHASE6.md](docs/PHASE6.md).
 
-The backend and dashboard land in later phases. Nothing in
+The dashboard lands in a later phase. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ## Requirements
@@ -44,6 +46,7 @@ this repo is a placeholder: if a directory exists, the code in it runs.
 | GPU | NVIDIA with Vulkan support (verified on RTX PRO 6000 Blackwell, driver 575.57) |
 | Python | 3.11 (the CARLA wheel is `manylinux_2_31`, cp310-cp312) |
 | CARLA | 0.9.16 packaged release, ~8 GB download / ~18 GB unpacked |
+| Database | PostgreSQL 16 - installed by `uv` via the `pgserver` wheel, no root |
 | Tooling | [uv](https://github.com/astral-sh/uv) |
 
 You do **not** need Unreal Engine, an Epic Games account, or a CARLA source
@@ -63,6 +66,21 @@ make smoke                # Phase 1 acceptance test
 make carla-stop
 ```
 
+Then the API and a full experiment over HTTP:
+
+```bash
+make model-dummy &         # the model, as its own gRPC service
+make api                   # REST on :8000, starts PostgreSQL itself
+
+curl -X POST localhost:8000/api/experiments \
+  -H 'Content-Type: application/json' \
+  -d '{"model_id":"dummy","scenario_id":"highway_cut_in_001","seed":42}'
+curl -X POST localhost:8000/api/experiments/EXP-0001/start
+curl localhost:8000/api/experiments/EXP-0001/metrics
+```
+
+Interactive docs at `http://localhost:8000/docs`.
+
 `make smoke` connects to the server, loads Town04, spawns a Tesla Model 3,
 attaches the front RGB camera, saves 20 frames, drives the car under throttle,
 brakes it to a standstill and cleans up every actor. It exits non-zero if any
@@ -81,6 +99,11 @@ simulator/
   metrics.py                 deterministic evaluation and scoring
   route.py                   route generation and completion
   npc.py                     lane-following controller for scenario vehicles
+backend/
+  main.py                    FastAPI app, syncs YAML registries into the DB
+  experiment_manager.py      the sole owner of experiment state
+  database/models.py         experiments, episodes, events, metrics
+  api/routes.py              REST endpoints
 model_gateway/
   protocol/driving.proto     the simulator <-> model contract
   server.py                  serve any DrivingPolicy over gRPC

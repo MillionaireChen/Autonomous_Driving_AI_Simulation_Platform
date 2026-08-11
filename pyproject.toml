@@ -15,6 +15,11 @@ dependencies = [
     "grpcio>=1.83.0",
     "grpcio-tools>=1.83.0",
     "protobuf>=7.35.1",
+    "pgserver>=0.1.4",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.3.4",
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.1",
 ]
 
 [dependency-groups]
