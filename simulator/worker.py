@@ -19,13 +19,16 @@ not know what any particular scenario means.
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import carla
+from PIL import Image as PILImage
 
 from simulator import carla_client, ego as ego_mod
 from simulator.metrics import EvaluationEngine
@@ -122,6 +125,7 @@ class SimulationWorker:
         output_dir: Optional[Path] = None,
         scenario: Optional[ScenarioConfig] = None,
         stop_flag: Optional[Any] = None,
+        on_tick: Optional[Callable[[dict[str, Any]], None]] = None,
     ) -> EpisodeResult:
         server = self.sim_config["server"]
         world_cfg = self.sim_config["world"]
@@ -225,6 +229,8 @@ class SimulationWorker:
                 action = VehicleControlAction()
                 previous_pose = ego_mod.pose_of(vehicle)
                 speed_sum = 0.0
+                last_frame_sent = -1
+                last_event_sent = 0
                 route_command = self.episode_config.get("route_command")
                 terminate_on_collision = bool(
                     scenario.termination.get("collision", True)
@@ -326,7 +332,27 @@ class SimulationWorker:
                         row["route_pct"] = round(
                             route.completion_percent(pose.x, pose.y), 2
                         )
+                    row["yaw"] = round(pose.yaw, 2)
                     telemetry.append(row)
+
+                    # -- live stream (spec sections 53/54) ------------------
+                    if on_tick is not None:
+                        message = {"type": "tick", "episode_id": episode_id, **row}
+                        # Only encode a frame when the camera actually produced
+                        # one, so a 10 Hz camera does not cost 20 Hz of JPEG.
+                        if camera is not None and camera.frame_count != last_frame_sent:
+                            last_frame_sent = camera.frame_count
+                            frame = camera.latest
+                            if frame is not None:
+                                buffer = io.BytesIO()
+                                PILImage.fromarray(frame).save(
+                                    buffer, format="JPEG", quality=70)
+                                message["camera_front"] = base64.b64encode(
+                                    buffer.getvalue()).decode("ascii")
+                        if runner is not None and len(runner.events) != last_event_sent:
+                            message["events"] = runner.events[last_event_sent:]
+                            last_event_sent = len(runner.events)
+                        on_tick(message)
 
                     # -- termination (spec section 24) ----------------------
                     if collision.count and terminate_on_collision:
@@ -339,6 +365,14 @@ class SimulationWorker:
 
                 result.collisions = collision.count
                 result.lane_invasions = lane_invasion.count
+                # Terminating events (a collision, an emergency stop) are logged
+                # after the last per-tick publish, so flush them or the live
+                # view never learns why the episode ended.
+                if on_tick is not None and runner is not None \
+                        and len(runner.events) != last_event_sent:
+                    on_tick({"type": "tick", "episode_id": episode_id,
+                             "events": runner.events[last_event_sent:]})
+
                 result.average_speed_mps = speed_sum / max(1, result.ticks)
                 result.camera_frames = camera.frame_count if camera else 0
                 result.status = "COMPLETED"

@@ -25,6 +25,7 @@ from typing import Optional
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.database.models import Episode, Event, Experiment, Metric, Model, Scenario
+from simulator.stream import Broadcaster
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -62,6 +63,8 @@ class ExperimentManager:
         self.output_root = output_root or (REPO_ROOT / "output" / "experiments")
         self._threads: dict[str, threading.Thread] = {}
         self._stop_flags: dict[str, threading.Event] = {}
+        #: Live telemetry fan-out, one per experiment (spec sections 53/54).
+        self.streams: dict[str, Broadcaster] = {}
         self._lock = threading.Lock()
 
     # -- state ------------------------------------------------------------
@@ -118,6 +121,7 @@ class ExperimentManager:
         with self._lock:
             self._threads[experiment.id] = thread
             self._stop_flags[experiment.id] = stop_flag
+            self.streams[experiment.id] = Broadcaster()
         thread.start()
 
     def stop(self, db: Session, experiment: Experiment) -> None:
@@ -176,10 +180,12 @@ class ExperimentManager:
                 evaluation_config=evaluation_config,
             )
             output_dir = self.output_root / experiment.id
+            stream = self.streams.get(experiment_id)
             result = worker.run_episode(
                 policy, episode_id=experiment.id,
                 output_dir=output_dir, scenario=scenario,
                 stop_flag=stop_flag,
+                on_tick=stream.publish if stream is not None else None,
             )
 
             self._persist(db, experiment, result, output_dir)
@@ -209,6 +215,9 @@ class ExperimentManager:
                 db.commit()
         finally:
             db.close()
+            stream = self.streams.get(experiment_id)
+            if stream is not None:
+                stream.close()
             with self._lock:
                 self._threads.pop(experiment_id, None)
                 self._stop_flags.pop(experiment_id, None)

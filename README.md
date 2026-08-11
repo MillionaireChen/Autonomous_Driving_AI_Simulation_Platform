@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 6 of 14 complete - Backend.**
+**Phase 8 of 14 complete - Bird-Eye View.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -34,9 +34,202 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   completion, comfort and a 0-100 score. See [docs/PHASE5.md](docs/PHASE5.md).
 - **Phase 6** - REST API, PostgreSQL and an experiment state machine. See
   [docs/PHASE6.md](docs/PHASE6.md).
+- **Phase 7** - live dashboard: camera and telemetry over WebSocket, start and
+  stop from the browser. See [docs/PHASE7.md](docs/PHASE7.md).
+- **Phase 8** - canvas bird-eye view drawn from telemetry.
+  See [docs/PHASE8.md](docs/PHASE8.md).
 
-The dashboard lands in a later phase. Nothing in
+Replay, learned models and the model arena land in later phases. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
+
+![dashboard](docs/images/dashboard-result.png)
+
+Every number in that screenshot is live: the CARLA render, the bird-eye view
+drawn from the same telemetry stream, DummyAgent's constant throttle, the
+cut-in that fired at 12.15 m, and the collision that ended the run.
+
+
+## Verified Runs
+
+Real output from this machine, not illustrations. Every phase doc carries the
+full log; this is the short version.
+
+**Environment**: Ubuntu 20.04.6 (glibc 2.31), 4x RTX PRO 6000 Blackwell,
+driver 575.57.08, CARLA 0.9.16, Python 3.11.15, PostgreSQL 16.2. No Docker on
+this host, so everything runs bare-metal.
+
+<details>
+<summary><b>Phase 1 - CARLA smoke test</b></summary>
+
+```
+$ make smoke
+CARLA connection successful  client 0.9.16 / server 0.9.16
+Map loaded                   Carla/Maps/Town04
+Sync mode enabled            fixed_delta_seconds=0.05 (20 steps/s)
+Vehicle spawned              vehicle.tesla.model3 id=397 spawn_point=0
+Camera active                800x450 fov=90 @10Hz
+Vehicle moved                displacement 24.1 m, peak speed 6.4 m/s
+Vehicle stopped              final speed 0.00 m/s
+20 frames received           saved to output/smoke_test/ (received 73 total)
+Cleanup successful           actors destroyed, server back in async mode
+
+  [PASS] frames_saved
+  [PASS] frames_not_blank
+  [PASS] vehicle_moved
+  [PASS] vehicle_stopped
+
+Phase 1 smoke test: PASS (12.6s)
+```
+
+Frames verified as real renders, not black: pixel std 54.3, full 0-255 range,
+and 11.05 mean absolute difference between frame 1 and frame 20 - the world is
+moving.
+</details>
+
+<details>
+<summary><b>Phase 3 - the same episode, model in-process vs over gRPC</b></summary>
+
+| | in-process | over gRPC |
+|---|---|---|
+| ticks | 400 | 400 |
+| distance | 88.5 m | **88.5 m** |
+| avg / max speed | 4.4 / 8.3 m/s | 4.4 / 8.3 m/s |
+| inferences | 200 | 200 |
+| latency p50 | 0.005 ms | 1.473 ms |
+| latency p95 | 0.007 ms | 3.207 ms |
+
+Identical trajectory across a process boundary. That equality is the whole
+point of the phase: the boundary costs latency and nothing else.
+
+Deadline enforcement, with a model built to miss its budget every fourth call:
+
+```
+model_id         slow-camera
+required_sensors ('rgb_front',)
+health_check     True
+inferences       60
+model_timeouts   15          <- exactly every 4th call
+invalid_actions  15          <- each timeout fell back safely
+latency p50/p95  7.9 / 505.5 ms   <- the 500 ms deadline is what cut it off
+```
+</details>
+
+<details>
+<summary><b>Phase 4/5 - Highway Cut-In, scored</b></summary>
+
+```
+$ make cut-in
+episode EP-CUTIN: policy=dummy duration=40s sim=20Hz inference=10Hz
+scenario highway_cut_in_001 (Highway Cut-In) map=Town04 seed=42
+
+status              COMPLETED (COLLISION)
+cut-in triggered    YES at 6.05s
+collisions          1
+ticks               672 (33.6s simulated in 23.1s wall)
+distance            253.6 m
+
+minimum TTC         4.55 s
+lane invasions      14
+route completion    82.0%
+RESULT              FAIL   score 0.0 / 100
+```
+
+The manoeuvre itself, from per-tick telemetry (lateral: -3.5 m is the left
+lane, 0 is the ego's lane):
+
+| t (s) | gap (m) | lateral (m) | |
+|---|---|---|---|
+| 0.00 | -26.4 | -6.5 | NPC starts behind, in the left lane |
+| 6.05 | +12.6 | -3.5 | **trigger fires** |
+| 8.05 | +31.1 | -1.8 | cut-in completes |
+| 11.00 | +56.3 | +0.1 | settled in the ego's lane |
+
+Three consecutive runs gave an identical trigger time (6.05 s), gap (12.15 m),
+tick count (672) and distance (253.6 m).
+
+DummyAgent failing is the expected result: it steers a constant 0, so it
+wanders across 14 lane markings and hits a guardrail. That is what makes it
+useful as a negative control.
+</details>
+
+<details>
+<summary><b>Phase 6 - an experiment over HTTP</b></summary>
+
+```
+$ curl -X POST localhost:8000/api/experiments \
+    -d '{"model_id":"dummy","scenario_id":"highway_cut_in_001","seed":42}'
+  201  EXP-0001  status=CREATED
+
+$ curl -X POST localhost:8000/api/experiments/EXP-0001/start
+  200  status=STARTING  ->  RUNNING  ->  COMPLETED  (~20 s)
+
+$ curl localhost:8000/api/experiments/EXP-0001
+  versions: {git_commit: 9ad9263, carla_client: 0.9.16,
+             carla_server: 0.9.16, scenario_version: "1.0"}
+
+$ curl localhost:8000/api/experiments/EXP-0001/episodes
+  collision=true  minimum_ttc=4.548  route_completion=82.00%
+  lane_invasions=14  ticks=672  distance=253.58 m
+  model_latency p50=1.505 ms p95=2.226 ms  result=FAIL  score=0.0
+```
+
+The API path and the CLI path agree exactly - 672 ticks, 253.58 m, 82.00%
+route, cut-in at 6.05 s. Only latency differs, because the model is reached
+over gRPC.
+
+The state machine refuses illegal moves rather than applying them:
+
+```
+$ curl -X POST localhost:8000/api/experiments/EXP-0001/start   # already COMPLETED
+409 {"detail":"EXP-0001: COMPLETED -> STARTING is not allowed
+     (legal: none, this state is terminal)"}
+```
+</details>
+
+<details>
+<summary><b>Phase 7/8 - live dashboard</b></summary>
+
+WebSocket against a live episode:
+
+```
+created EXP-0007
+started
+stream ended
+ticks=673 camera_frames=336 heartbeats=8
+avg jpeg = 27.4 KB
+events: [(0.0, 'EPISODE_STARTED'), (6.05, 'CUT_IN_TRIGGERED'),
+         (8.05, 'CUT_IN_COMPLETED'), (33.55, 'COLLISION')]
+```
+
+336 frames out of 673 ticks is exactly the 10 Hz camera against the 20 Hz
+world.
+
+Verified in a real browser on a display-less machine - headless Chromium clicks
+START and waits for an actual camera `<img>` to appear before shooting, so the
+screenshot only exists if CARLA, gRPC, the worker, the socket and React all
+worked:
+
+```
+$ uv run python scripts/capture_dashboard.py
+captured docs/images/dashboard-idle.png
+first camera frame received in the browser
+captured docs/images/dashboard-running.png
+captured docs/images/dashboard-result.png
+```
+</details>
+
+<details>
+<summary><b>Test suite</b></summary>
+
+```
+$ make test
+120 passed in 2.13s
+```
+
+No CARLA required - the suite covers the safety envelope, the gRPC protocol
+against a real loopback server, scenario geometry and triggers, the scoring
+arithmetic, and the experiment state machine.
+</details>
 
 ## Requirements
 

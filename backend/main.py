@@ -20,6 +20,7 @@ import yaml  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 
 from backend.api.routes import router  # noqa: E402
+from backend.api.websocket import router as ws_router  # noqa: E402
 from backend.database.models import Model, Scenario  # noqa: E402
 from backend.database.session import create_all, session_factory  # noqa: E402
 from backend.experiment_manager import ExperimentManager  # noqa: E402
@@ -80,6 +81,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(router)
+app.include_router(ws_router)
+
+# The dashboard is served from a different origin during development.
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["meta"])

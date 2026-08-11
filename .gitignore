@@ -21,3 +21,8 @@ dataset/
 .vscode/
 .idea/
 .DS_Store
+
+# Frontend build artefacts (staged on local disk, see scripts/fe-install.sh)
+frontend/node_modules
+frontend/.next
+frontend/next-env.d.ts

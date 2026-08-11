@@ -383,10 +383,15 @@ class ScenarioRunner:
     def npc_state(self, ego: carla.Vehicle) -> dict[str, Any]:
         if self.npc is None:
             return {}
+        tf = self.npc.get_transform()
         return {
             "npc_gap_m": round(longitudinal_gap(ego, self.npc), 3),
             "npc_lateral_m": round(lateral_offset(ego, self.npc), 3),
             "npc_speed_mps": round(speed_of(self.npc), 3),
+            # Absolute pose for the bird-eye view (spec section 55).
+            "npc_x": round(tf.location.x, 3),
+            "npc_y": round(tf.location.y, 3),
+            "npc_yaw": round(tf.rotation.yaw, 2),
         }
 
     # -- teardown ------------------------------------------------------

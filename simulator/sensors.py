@@ -58,6 +58,11 @@ class CameraSensor:
         self.actor = world.spawn_actor(bp, transform, attach_to=parent)
         self.actor.listen(self._queue.put)
 
+    @property
+    def latest(self) -> Optional[np.ndarray]:
+        """Most recent frame, without draining the queue."""
+        return self._latest
+
     def poll(self) -> Optional[np.ndarray]:
         """Drain whatever arrived and return the newest frame.
 
