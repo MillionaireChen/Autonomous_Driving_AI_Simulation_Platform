@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 11 of 14 complete - learned driving model.**
+**Phase 12 of 14 complete - Model Arena.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -46,9 +46,10 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 - **Phase 11** - an end-to-end neural policy (ResNet-18 + speed -> control and
   a 2 s path), trained on 23,639 expert samples, plus `TRAJECTORY_POLICY` so
   waypoint-output models can drive. See [docs/PHASE11.md](docs/PHASE11.md).
+- **Phase 12** - Model Arena: two models, one scenario, one seed, side by side.
+  See [docs/PHASE12.md](docs/PHASE12.md).
 
-The model arena, parallel simulation and batch evaluation land in later
-phases. Nothing in
+Parallel simulation and batch evaluation land in later phases. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ![dashboard](docs/images/dashboard-result.png)
@@ -343,6 +344,34 @@ is DAgger rather than more of the same data.
 Real inference latency at last: **p50 13.5 ms, p95 21.0 ms** for a ResNet-18
 forward pass across gRPC. Every earlier model reported microseconds because it
 was arithmetic.
+</details>
+
+<details>
+<summary><b>Phase 12 - Model Arena</b></summary>
+
+![arena](docs/images/arena.png)
+
+```
+$ curl -X POST localhost:8000/api/arena \
+    -d '{"model_a":"pid","model_b":"cnn_il","scenario_id":"highway_cut_in_001","seed":42}'
+{"experiment_a": "EXP-0010", "experiment_b": "EXP-0011"}
+
+fair comparison: True | scenario highway_cut_in_001 seed 42
+
+                                    pid             cnn_il
+RESULT                             PASS               FAIL
+SCORE                             85.62               0.00
+COLLISIONS                            0                  1
+MIN TTC                            7.06               4.55
+LANE INVASIONS                        0                 12
+ROUTE %                           58.10              42.33
+LATENCY p50 ms                     2.32              17.07
+ENDED BY                        TIMEOUT          COLLISION
+```
+
+The latency column is the part only a platform tells you: the rule-based expert
+answers in 2.3 ms, the neural policy in 15-17 ms. Both are far inside the
+500 ms budget, but an order of magnitude apart.
 </details>
 
 <details>

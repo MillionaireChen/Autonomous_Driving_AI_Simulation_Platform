@@ -73,8 +73,8 @@ Leaving CARLA running holds GPU 0 from other users.
 | 9 | Replay | done |
 | 10 | PID / rule-based baseline | done |
 | 11 | Learned driving model | done |
-| 12 | Model Arena (A vs B) | **next** |
-| 13 | Parallel simulation (2 CARLA instances) | todo |
+| 12 | Model Arena (A vs B) | done |
+| 13 | Parallel simulation (2 CARLA instances) | **next** |
 | 14 | Batch evaluation over seeds | todo |
 
 ### Phase 9 - Replay

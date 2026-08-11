@@ -146,6 +146,9 @@ export default function Dashboard() {
           <span className={`pill ${live ? "good" : ""}`}>
             {experiment?.status ?? "IDLE"}
           </span>
+          <a href="/arena" className="pill" style={{ textDecoration: "none" }}>
+            ARENA
+          </a>
         </div>
       </div>
 

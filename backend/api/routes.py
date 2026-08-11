@@ -15,6 +15,7 @@ from backend.database.models import (
 from backend.database.session import get_session
 from backend.experiment_manager import IllegalTransition
 from backend.schemas import (
+    ArenaIn,
     EpisodeOut,
     EventOut,
     ExperimentIn,
@@ -262,3 +263,73 @@ def experiment_frame(experiment_id: str, index: int,
     if not path.resolve().is_relative_to(root) or not path.exists():
         raise HTTPException(404, "frame file is missing")
     return FileResponse(path, media_type="image/jpeg")
+
+
+# --- arena (spec section 60) ---------------------------------------------
+@router.post("/arena", status_code=201, tags=["arena"])
+def create_arena(payload: ArenaIn, request: Request,
+                 db: Session = Depends(get_session)):
+    """Run two models against an identical scenario, seed and simulator config.
+
+    The comparison is only meaningful if nothing else differs, so both
+    experiments are created from the same scenario and seed and run back to
+    back on the one CARLA server.
+    """
+    if payload.model_a == payload.model_b:
+        raise HTTPException(400, "pick two different models")
+    try:
+        experiments = [
+            manager(request).create(db, model_id, payload.scenario_id, payload.seed,
+                                    record_frames=payload.record_frames)
+            for model_id in (payload.model_a, payload.model_b)
+        ]
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    manager(request).start_sequence(db, experiments)
+    return {
+        "scenario_id": payload.scenario_id,
+        "seed": payload.seed,
+        "experiment_a": experiments[0].id,
+        "experiment_b": experiments[1].id,
+    }
+
+
+@router.get("/compare", tags=["arena"])
+def compare(a: str, b: str, db: Session = Depends(get_session)):
+    """Side-by-side results for two experiments."""
+    def side(experiment_id: str) -> dict:
+        experiment = db.get(Experiment, experiment_id)
+        if experiment is None:
+            raise HTTPException(404, f"unknown experiment {experiment_id!r}")
+        episodes = (db.query(Episode)
+                      .filter(Episode.experiment_id == experiment_id).all())
+        episode = episodes[0] if episodes else None
+        return {
+            "experiment_id": experiment.id,
+            "model_id": experiment.model_id,
+            "status": experiment.status,
+            "scenario_id": experiment.scenario_id,
+            "seed": experiment.seed,
+            "result": episode.result if episode else None,
+            "score": episode.score if episode else None,
+            "collisions": episode.collision_count if episode else None,
+            "minimum_ttc": episode.minimum_ttc if episode else None,
+            "lane_invasions": episode.lane_invasion_count if episode else None,
+            "route_completion": episode.route_completion if episode else None,
+            "average_speed": episode.average_speed if episode else None,
+            "distance_m": episode.distance_m if episode else None,
+            "latency_p50": episode.model_latency_p50 if episode else None,
+            "latency_p95": episode.model_latency_p95 if episode else None,
+            "termination_reason": episode.termination_reason if episode else None,
+        }
+
+    left, right = side(a), side(b)
+    fair = (left["scenario_id"] == right["scenario_id"]
+            and left["seed"] == right["seed"])
+    return {
+        "fair": fair,
+        "detail": "" if fair else "different scenario or seed; not comparable",
+        "a": left,
+        "b": right,
+    }

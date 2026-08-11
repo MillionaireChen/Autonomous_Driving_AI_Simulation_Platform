@@ -128,6 +128,34 @@ class ExperimentManager:
             self.streams[experiment.id] = Broadcaster()
         thread.start()
 
+    def start_sequence(self, db: Session, experiments: list[Experiment]) -> None:
+        """Run several experiments back to back on one worker thread.
+
+        Sequential, not parallel, and deliberately: there is one CARLA server,
+        and two episodes sharing it would interleave their world ticks and
+        corrupt both. Parallel arena runs need the second simulator from
+        Phase 13.
+        """
+        for experiment in experiments:
+            self.set_status(db, experiment, "STARTING")
+
+        ids = [e.id for e in experiments]
+        flags = {i: threading.Event() for i in ids}
+        thread = threading.Thread(
+            target=self._run_sequence, args=(ids, flags),
+            name=f"arena-{'-'.join(ids)}", daemon=True,
+        )
+        with self._lock:
+            for i in ids:
+                self._threads[i] = thread
+                self._stop_flags[i] = flags[i]
+                self.streams[i] = Broadcaster()
+        thread.start()
+
+    def _run_sequence(self, ids: list[str], flags: dict[str, threading.Event]) -> None:
+        for experiment_id in ids:
+            self._run(experiment_id, flags[experiment_id])
+
     def stop(self, db: Session, experiment: Experiment) -> None:
         """Ask a running experiment to stop at the next tick."""
         with self._lock:

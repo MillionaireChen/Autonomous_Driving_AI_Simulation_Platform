@@ -61,6 +61,16 @@ class ExperimentIn(BaseModel):
     record_frames: bool = False
 
 
+class ArenaIn(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_a: str
+    model_b: str
+    scenario_id: str
+    seed: int = 42
+    record_frames: bool = False
+
+
 class ExperimentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
