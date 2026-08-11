@@ -202,6 +202,12 @@ class CutInAction(ScenarioAction):
     def __init__(self, config):
         super().__init__(config)
         self.duration = float(config.get("duration_seconds", 2.0))
+        # Speed the NPC holds once it is in the ego's lane. Without this the
+        # scenario cannot test braking: a vehicle that cuts in and keeps
+        # pulling away is never a threat, and TTC stays undefined.
+        self.speed_after: Optional[float] = (
+            float(config["speed_after_mps"]) if "speed_after_mps" in config else None
+        )
         self.elapsed = 0.0
         self.side: Optional[str] = None
 
@@ -234,6 +240,8 @@ class CutInAction(ScenarioAction):
             if ctx.npc_controller:
                 ctx.npc_controller.blend = 0.0
                 ctx.npc_controller.blend_target_side = None
+                if self.speed_after is not None:
+                    ctx.npc_controller.target_speed = self.speed_after
         return self.finished
 
 

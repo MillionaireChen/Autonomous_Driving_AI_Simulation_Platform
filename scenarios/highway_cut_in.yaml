@@ -59,6 +59,11 @@ action:
   type: cut_in
   target_lane: ego_lane
   duration_seconds: 2.0
+  # Once in the ego's lane the NPC settles to a speed below the ego's cruise,
+  # so the ego closes on it and has to react. Without this the scenario tests
+  # nothing: a car that cuts in and keeps accelerating away is never a threat
+  # and the time-to-collision stays undefined.
+  speed_after_mps: 8.0
 
 termination:
   collision: true

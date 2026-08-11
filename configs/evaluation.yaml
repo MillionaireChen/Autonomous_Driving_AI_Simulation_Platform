@@ -1,0 +1,34 @@
+# Evaluation thresholds and scoring weights (spec sections 30-36).
+#
+# Scoring is deterministic arithmetic over these numbers. It is never a
+# judgement call and never asks a model to grade anything (spec section 84.11).
+
+ttc:
+  # A vehicle counts as "in front" only within this lateral corridor, so a car
+  # in the next lane is not treated as an imminent collision.
+  corridor_half_width_m: 2.0
+  # Below this closing speed TTC is meaningless (approaching arbitrarily slowly).
+  min_closing_speed_mps: 0.1
+  # Longitudinal slack for vehicle bodies: gap is measured centre to centre.
+  vehicle_extent_m: 4.5
+  warning_below_s: 3.0
+  dangerous_below_s: 2.0
+
+comfort:
+  # Deceleration harsher than this counts as a hard brake, once per event
+  # rather than once per tick.
+  hard_brake_mps2: -4.0
+
+route:
+  # The route is the ego's starting lane followed forward for this far.
+  length_m: 300
+
+score:
+  base: 100
+  collision: -100
+  ttc_below_1s: -30
+  ttc_below_2s: -15
+  lane_invasion_each: -10
+  hard_brake_each: -3
+  # Penalty is (100 - completion_percent) * this factor.
+  route_incomplete_factor: 0.2

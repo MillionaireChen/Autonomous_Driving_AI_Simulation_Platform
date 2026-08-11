@@ -116,8 +116,15 @@ class EpisodeResult:
     inference_latency_ms_p95: float = 0.0
 
     collisions: int = 0
+    lane_invasions: int = 0
     scenario_triggered: bool = False
     scenario_triggered_at: Optional[float] = None
+
+    # Filled in by the evaluation engine when one is configured.
+    score: Optional[float] = None
+    result: str = ""
+    minimum_ttc_s: Optional[float] = None
+    route_completion_percent: Optional[float] = None
 
     versions: dict = field(default_factory=dict)
     events: list = field(default_factory=list)

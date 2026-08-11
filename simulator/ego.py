@@ -56,6 +56,24 @@ def speed_of(actor: carla.Actor) -> float:
     return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
 
 
+def lateral_acceleration(actor: carla.Actor) -> float:
+    """Acceleration across the vehicle's own axis, in m/s^2 (cornering load)."""
+    a = actor.get_acceleration()
+    right = actor.get_transform().get_right_vector()
+    return a.x * right.x + a.y * right.y + a.z * right.z
+
+
+def forward_speed(actor: carla.Actor, reference: carla.Actor) -> float:
+    """Speed of `actor` along `reference`'s heading, in m/s.
+
+    Used for closing speed: two cars in the same lane are only approaching
+    each other along the direction of travel.
+    """
+    v = actor.get_velocity()
+    forward = reference.get_transform().get_forward_vector()
+    return v.x * forward.x + v.y * forward.y + v.z * forward.z
+
+
 def longitudinal_acceleration(actor: carla.Actor) -> float:
     """Acceleration along the vehicle's own forward axis, in m/s^2.
 

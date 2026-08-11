@@ -62,6 +62,8 @@ def main() -> int:
     parser.add_argument("--duration", type=float, default=None,
                         help="override duration_seconds from episode.yaml")
     parser.add_argument("--model-timeout-ms", type=float, default=None)
+    parser.add_argument("--no-eval", action="store_true",
+                        help="skip scoring; just run the loop")
     parser.add_argument("--output", default=None,
                         help="directory for episode.json and telemetry.jsonl")
     args = parser.parse_args()
@@ -91,7 +93,9 @@ def main() -> int:
         if args.duration is not None:
             scenario.duration_seconds = args.duration
 
-    worker = SimulationWorker(sim_config, camera_config, ego_config, episode_config)
+    evaluation_config = None if args.no_eval else cfg.load_yaml("evaluation.yaml")
+    worker = SimulationWorker(sim_config, camera_config, ego_config, episode_config,
+                              evaluation_config=evaluation_config)
 
     duration = scenario.duration_seconds if scenario else episode_config["duration_seconds"]
     print(f"episode {args.episode_id}: policy={policy.name} ({source_label}) "
@@ -122,7 +126,16 @@ def main() -> int:
           f" (invalid {result.invalid_actions}, timeouts {result.model_timeouts})")
     print(f"inference latency   p50 {result.inference_latency_ms_p50:.3f} ms,"
           f" p95 {result.inference_latency_ms_p95:.3f} ms")
-    print(f"artifacts           {output_dir}")
+
+    if result.result:
+        ttc = ("%.2f s" % result.minimum_ttc_s) if result.minimum_ttc_s is not None \
+            else "no vehicle ahead"
+        print(f"\nminimum TTC         {ttc}")
+        print(f"lane invasions      {result.lane_invasions}")
+        print(f"route completion    {result.route_completion_percent:.1f}%")
+        print(f"RESULT              {result.result}   score {result.score:.1f} / 100")
+
+    print(f"\nartifacts           {output_dir}")
 
     return 0 if result.status == "COMPLETED" else 1
 

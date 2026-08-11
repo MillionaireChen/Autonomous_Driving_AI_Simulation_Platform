@@ -82,6 +82,38 @@ class CameraSensor:
             pass
 
 
+class LaneInvasionSensor:
+    """Records lane-marking crossings by the parent actor.
+
+    CARLA fires one event per crossing, and a single event can list several
+    markings at once (crossing a double line). Each event is counted once.
+    """
+
+    def __init__(self, world: carla.World, parent: carla.Actor) -> None:
+        bp = world.get_blueprint_library().find("sensor.other.lane_invasion")
+        self.actor = world.spawn_actor(bp, carla.Transform(), attach_to=parent)
+        self.events: list[dict[str, Any]] = []
+        self.actor.listen(self._on_event)
+
+    def _on_event(self, event: carla.LaneInvasionEvent) -> None:
+        self.events.append({
+            "frame": event.frame,
+            "crossed": sorted({str(m.type) for m in event.crossed_lane_markings}),
+        })
+
+    @property
+    def count(self) -> int:
+        return len(self.events)
+
+    def destroy(self) -> None:
+        try:
+            if self.actor.is_listening:
+                self.actor.stop()
+            self.actor.destroy()
+        except RuntimeError:
+            pass
+
+
 class CollisionSensor:
     """Records collision events on the parent actor.
 

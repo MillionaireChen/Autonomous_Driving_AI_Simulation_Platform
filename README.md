@@ -17,7 +17,7 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
 
 ## Status
 
-**Phase 4 of 14 complete - Scenario Engine.**
+**Phase 5 of 14 complete - Evaluation Engine.**
 
 - **Phase 1** - headless CARLA server pinned to a single GPU, Python 3.11
   client, end-to-end smoke test. See [docs/PHASE1.md](docs/PHASE1.md).
@@ -30,8 +30,10 @@ Observation_t  ->  Driving Policy  ->  Action_t  ->  CARLA  ->  Observation_t+1
   [docs/PHASE3.md](docs/PHASE3.md).
 - **Phase 4** - YAML scenarios with a trigger/action registry, and the Highway
   Cut-In. See [docs/PHASE4.md](docs/PHASE4.md).
+- **Phase 5** - deterministic evaluation: collision, TTC, lane invasion, route
+  completion, comfort and a 0-100 score. See [docs/PHASE5.md](docs/PHASE5.md).
 
-The evaluation engine, backend and dashboard land in later phases. Nothing in
+The backend and dashboard land in later phases. Nothing in
 this repo is a placeholder: if a directory exists, the code in it runs.
 
 ## Requirements
@@ -76,6 +78,8 @@ simulator/
   carla_client.py            connection and synchronous-world lifecycle
   ego.py, sensors.py         ego spawning, camera and collision sensors
   scenario.py                YAML scenarios: trigger/action registries
+  metrics.py                 deterministic evaluation and scoring
+  route.py                   route generation and completion
   npc.py                     lane-following controller for scenario vehicles
 model_gateway/
   protocol/driving.proto     the simulator <-> model contract
@@ -90,6 +94,7 @@ configs/
   simulator/ego.yaml         ego blueprint and target speed
   simulator/episode.yaml     duration, inference rate, weather
   sensors/front_camera.yaml  800x450 @ 10 FPS front RGB camera
+  evaluation.yaml            scoring weights and thresholds
 scenarios/
   highway_cut_in.yaml        overtake-then-cut-in on the Town04 highway
 scripts/

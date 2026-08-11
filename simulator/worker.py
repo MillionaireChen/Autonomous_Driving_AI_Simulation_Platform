@@ -28,9 +28,17 @@ from typing import Any, Optional
 import carla
 
 from simulator import carla_client, ego as ego_mod
+from simulator.metrics import EvaluationEngine
 from simulator.policy import DrivingPolicy
-from simulator.scenario import ScenarioConfig, ScenarioContext, ScenarioRunner
-from simulator.sensors import CameraSensor, CollisionSensor
+from simulator.route import build_route
+from simulator.scenario import (
+    ScenarioConfig,
+    ScenarioContext,
+    ScenarioRunner,
+    lateral_offset,
+    longitudinal_gap,
+)
+from simulator.sensors import CameraSensor, CollisionSensor, LaneInvasionSensor
 from simulator.types import (
     EpisodeResult,
     Observation,
@@ -49,11 +57,13 @@ class SimulationWorker:
         camera_config: dict[str, Any],
         ego_config: dict[str, Any],
         episode_config: dict[str, Any],
+        evaluation_config: Optional[dict[str, Any]] = None,
     ) -> None:
         self.sim_config = sim_config
         self.camera_config = camera_config
         self.ego_config = ego_config
         self.episode_config = episode_config
+        self.evaluation_config = evaluation_config
 
         self.fixed_delta = float(sim_config["world"]["fixed_delta_seconds"])
         self.sim_hz = 1.0 / self.fixed_delta
@@ -81,6 +91,28 @@ class SimulationWorker:
             rgb_front=camera.poll() if camera else None,
             route_command=route_command,
         )
+
+    # -- time to collision -------------------------------------------------
+    def _minimum_ttc(
+        self,
+        ego: carla.Vehicle,
+        others: list[carla.Actor],
+        engine: EvaluationEngine,
+    ) -> Optional[float]:
+        """Smallest TTC against any vehicle ahead in the ego's corridor."""
+        ego_speed = ego_mod.forward_speed(ego, ego)
+        best: Optional[float] = None
+        for other in others:
+            if other is None or not other.is_alive:
+                continue
+            gap = longitudinal_gap(ego, other)
+            if gap <= 0.0:
+                continue
+            closing = ego_speed - ego_mod.forward_speed(other, ego)
+            ttc = engine.time_to_collision(gap, lateral_offset(ego, other), closing)
+            if ttc is not None and (best is None or ttc < best):
+                best = ttc
+        return best
 
     # -- episode ----------------------------------------------------------
     def run_episode(
@@ -132,7 +164,13 @@ class SimulationWorker:
         vehicle = None
         camera = None
         collision = None
+        lane_invasion = None
+        route = None
+        final_pose = None
         runner = ScenarioRunner(scenario) if scenario else None
+        engine = (
+            EvaluationEngine(self.evaluation_config) if self.evaluation_config else None
+        )
 
         with carla_client.synchronous_world(
             client, town, self.fixed_delta, weather=weather
@@ -145,6 +183,7 @@ class SimulationWorker:
                 )
                 camera = CameraSensor(world, vehicle, self.camera_config)
                 collision = CollisionSensor(world, vehicle)
+                lane_invasion = LaneInvasionSensor(world, vehicle)
 
                 # Let the suspension settle before the episode clock starts,
                 # otherwise the first metres are the car dropping onto the road.
@@ -158,6 +197,14 @@ class SimulationWorker:
                     world.tick()
                     if camera:
                         camera.poll()
+
+                # The route starts where the ego actually settled, so it must be
+                # built after the settle ticks too.
+                if engine is not None:
+                    route = build_route(
+                        world.get_map(), vehicle.get_location(),
+                        float(self.evaluation_config["route"]["length_m"]),
+                    )
 
                 if runner is not None:
                     runner.setup(world, vehicle)
@@ -240,6 +287,30 @@ class SimulationWorker:
                     }
                     if runner is not None:
                         row.update(runner.npc_state(vehicle))
+
+                    # -- evaluation (spec sections 30-36) -------------------
+                    #
+                    # An impact is not a comfort measurement. Hitting a
+                    # guardrail registers as roughly -150 m/s^2 and 3000 m/s^3,
+                    # which would swamp every deceleration and jerk figure and
+                    # charge the score for a "hard brake" that was a crash. So
+                    # once a collision has landed, comfort stops accumulating.
+                    collided = collision.count > 0
+                    if engine is not None and not collided:
+                        others = runner.actors() if runner is not None else []
+                        ttc = self._minimum_ttc(vehicle, others, engine)
+                        engine.update(
+                            dt=self.fixed_delta,
+                            speed_mps=speed,
+                            longitudinal_accel=ego_mod.longitudinal_acceleration(vehicle),
+                            lateral_accel=ego_mod.lateral_acceleration(vehicle),
+                            ttc_s=ttc,
+                        )
+                        row["ttc_s"] = round(ttc, 3) if ttc is not None else None
+                    if route is not None:
+                        row["route_pct"] = round(
+                            route.completion_percent(pose.x, pose.y), 2
+                        )
                     telemetry.append(row)
 
                     # -- termination (spec section 24) ----------------------
@@ -252,9 +323,11 @@ class SimulationWorker:
                     result.termination_reason = "TIMEOUT" if scenario else "DURATION"
 
                 result.collisions = collision.count
+                result.lane_invasions = lane_invasion.count
                 result.average_speed_mps = speed_sum / max(1, result.ticks)
                 result.camera_frames = camera.frame_count if camera else 0
                 result.status = "COMPLETED"
+                final_pose = previous_pose
 
                 if runner is not None:
                     result.scenario_triggered = runner.triggered
@@ -267,6 +340,7 @@ class SimulationWorker:
                 carla_client.destroy_actors(
                     [camera.actor if camera else None,
                      collision.actor if collision else None,
+                     lane_invasion.actor if lane_invasion else None,
                      vehicle, *extra]
                 )
 
@@ -277,9 +351,31 @@ class SimulationWorker:
         # Remote adapters track deadline misses; in-process policies have none.
         result.model_timeouts = int(getattr(policy, "timeouts", 0))
 
+        metrics = None
+        if engine is not None and final_pose is not None:
+            metrics = engine.finish(
+                collision_count=result.collisions,
+                lane_invasion_count=result.lane_invasions,
+                route=route,
+                final_x=final_pose.x,
+                final_y=final_pose.y,
+                distance_m=result.distance_m,
+                duration_s=result.simulated_seconds,
+                latencies_ms=latencies,
+                model_timeouts=result.model_timeouts,
+            )
+            result.score = metrics.score
+            result.result = metrics.result
+            result.minimum_ttc_s = metrics.minimum_ttc_s
+            result.route_completion_percent = metrics.route_completion_percent
+
         if output_dir is not None:
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / "episode.json").write_text(json.dumps(asdict(result), indent=2))
+            if metrics is not None:
+                (output_dir / "metrics.json").write_text(
+                    json.dumps(metrics.to_dict(), indent=2)
+                )
             with (output_dir / "telemetry.jsonl").open("w") as fh:
                 for row in telemetry:
                     fh.write(json.dumps(row) + "\n")
