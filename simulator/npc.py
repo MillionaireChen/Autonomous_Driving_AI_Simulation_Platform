@@ -57,6 +57,10 @@ class LaneFollower:
         #: 0 = own lane, 1 = fully in `blend_target_side` lane.
         self.blend = 0.0
         self.blend_target_side: Optional[str] = None  # "left" | "right"
+        #: False when a blend was requested but the target lane did not resolve.
+        #: Without this the fallback below is silent, and a scenario reports a
+        #: manoeuvre it never performed.
+        self.blend_resolved = True
 
     def _lookahead_distance(self) -> float:
         # Longer lookahead at speed keeps the steering from oscillating.
@@ -85,7 +89,9 @@ class LaneFollower:
             else ahead[0].get_right_lane()
         )
         if neighbour is None or neighbour.lane_type != carla.LaneType.Driving:
+            self.blend_resolved = False
             return own
+        self.blend_resolved = True
 
         other = neighbour.transform.location
         t = min(max(self.blend, 0.0), 1.0)

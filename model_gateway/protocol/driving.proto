@@ -5,9 +5,8 @@
 // another GPU, in another container or on another machine, without the
 // simulation worker knowing the difference.
 //
-// Both CONTROL_POLICY and TRAJECTORY_POLICY are implemented: a model answers
-// Infer with either pedals or a path, and the simulator executes whichever it
-// gets.
+// All three policy types are implemented: a model answers Infer with pedals, a
+// path, or a semantic decision, and the simulator executes whichever it gets.
 
 syntax = "proto3";
 
@@ -31,6 +30,7 @@ enum ModelType {
   MODEL_TYPE_UNSPECIFIED = 0;
   CONTROL_POLICY = 1;
   TRAJECTORY_POLICY = 2;
+  HIGH_LEVEL_POLICY = 3;
 }
 
 message HealthCheckRequest {}
@@ -133,6 +133,20 @@ message Trajectory {
   repeated TrajectoryPoint waypoints = 1;
 }
 
+// A semantic manoeuvre, executed by a controller in the simulator
+// (spec section 14). This is what makes a large model viable as a driver: it
+// answers in about 100 ms, which is fine for a decision and hopeless for
+// steering at 20 Hz.
+message Decision {
+  // One of KEEP_LANE, SLOW_DOWN, BRAKE, CHANGE_LEFT, CHANGE_RIGHT. A word
+  // outside that set is a rejected action, not undefined behaviour.
+  string decision = 1;
+  // Free text, recorded in the event log. A VLM can say why it braked, which
+  // is most of the appeal of putting one here.
+  string reason = 2;
+  double confidence = 3;
+}
+
 message InferResponse {
   // A model answers with pedals or with a path, never both. Waypoint output is
   // what TCP, Transfuser, InterFuser and LAV all emit; the simulator's
@@ -141,5 +155,6 @@ message InferResponse {
   oneof action {
     VehicleControl control = 1;
     Trajectory trajectory = 2;
+    Decision decision = 3;
   }
 }

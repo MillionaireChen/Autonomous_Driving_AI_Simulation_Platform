@@ -132,6 +132,37 @@ class TrajectoryAction:
         ) and len(self.waypoints) > 0
 
 
+#: The discrete manoeuvres a high-level policy may ask for (spec section 14).
+#: Deliberately small: every one has an unambiguous execution, and a closed set
+#: can be validated - a model that invents a word is a rejected action rather
+#: than an undefined behaviour.
+DECISIONS = (
+    "KEEP_LANE",
+    "SLOW_DOWN",
+    "BRAKE",
+    "CHANGE_LEFT",
+    "CHANGE_RIGHT",
+)
+
+
+@dataclass
+class HighLevelDecision:
+    """A semantic manoeuvre, executed by a controller in the simulator.
+
+    This is the VLM-driver shape (spec section 14): the model says *what* to do
+    and a conventional controller works out the pedals. Keeping the model out of
+    the control loop is what makes it viable at all - a 7B model answers in
+    about 100 ms, which is fine for a decision and far too slow for steering.
+    """
+
+    decision: str
+    reason: str = ""
+    confidence: Optional[float] = None
+
+    def is_valid(self) -> bool:
+        return self.decision in DECISIONS
+
+
 # Applied when a policy fails: coast and brake gently, keep the wheel where it
 # was rather than jerking it straight (spec section 50).
 def safety_fallback(previous_steer: float = 0.0) -> VehicleControlAction:
@@ -172,12 +203,19 @@ class EpisodeResult:
     lane_invasions: int = 0
     scenario_triggered: bool = False
     scenario_triggered_at: Optional[float] = None
+    #: False when the scenario's manoeuvre was attempted and did not occur - the
+    #: episode ran, but it did not test what it was supposed to test.
+    scenario_manoeuvre_ok: bool = True
 
     # Filled in by the evaluation engine when one is configured.
     score: Optional[float] = None
     result: str = ""
     minimum_ttc_s: Optional[float] = None
     route_completion_percent: Optional[float] = None
+
+    #: How many times each high-level manoeuvre was executed, when the policy
+    #: is a decision model. Empty for control and trajectory policies.
+    decision_counts: dict = field(default_factory=dict)
 
     versions: dict = field(default_factory=dict)
     events: list = field(default_factory=list)

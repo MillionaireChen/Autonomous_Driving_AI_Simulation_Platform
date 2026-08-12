@@ -34,3 +34,14 @@ models:
     # Inference runs on the same card as CARLA; both fit comfortably.
     gpu: 0
     display_order: 20
+
+  - id: vlm
+    name: VLM Decision (zero-shot)
+    # High-level manoeuvres, executed by the simulator's controller (spec 14).
+    type: HIGH_LEVEL_POLICY
+    endpoint: localhost:51004
+    # A decision takes ~100 ms; the budget is generous because the controller
+    # keeps driving between inferences rather than waiting.
+    timeout_ms: 800
+    gpu: 1
+    display_order: 5

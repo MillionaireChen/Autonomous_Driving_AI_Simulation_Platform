@@ -212,9 +212,14 @@ class CutInAction(ScenarioAction):
         self.elapsed = 0.0
         self.side: Optional[str] = None
 
+    #: How close, laterally, the NPC must end up to count as having entered the
+    #: ego's lane. A lane is 3.5 m wide, so half of that is unambiguous.
+    ENTERED_LANE_M = 1.75
+
     def start(self, ctx: ScenarioContext) -> dict[str, Any]:
         self.started = True
         self.elapsed = 0.0
+        self.entered_lane = False
         # Which way is the ego from the NPC? Cut towards it.
         self.side = "right" if lateral_offset(ctx.npc, ctx.ego) > 0 else "left"
         if ctx.npc_controller:
@@ -235,6 +240,15 @@ class CutInAction(ScenarioAction):
             ctx.npc_controller.blend = progress
         if progress >= 1.0:
             self.finished = True
+            # Did it actually get there? Measured from the poses, not inferred
+            # from the blend having been asked for. The controller falls back to
+            # its own lane when the target lane does not resolve, which used to
+            # be invisible: an episode logged CUT_IN_COMPLETED while the NPC sat
+            # a full lane away and the ego simply overtook it.
+            self.entered_lane = (
+                ctx.npc is not None
+                and abs(lateral_offset(ctx.ego, ctx.npc)) <= self.ENTERED_LANE_M
+            )
             # Release the blend. By now the NPC's own lane *is* the ego's lane,
             # so leaving it set would steer it towards the next lane over and
             # it would keep drifting sideways across the carriageway.
@@ -263,6 +277,9 @@ class ScenarioRunner:
         self.traffic: list[carla.Vehicle] = []
 
         self.events: list[dict[str, Any]] = []
+        #: False once a manoeuvre was attempted and demonstrably did not happen.
+        #: An episode whose scenario did not occur cannot evaluate a model.
+        self.manoeuvre_ok = True
         self.triggered = False
         self.triggered_at: Optional[float] = None
 
@@ -393,10 +410,21 @@ class ScenarioRunner:
                 self.log_event(ctx.sim_time, "CUT_IN_TRIGGERED", data)
         elif self.action is not None and not self.action.finished:
             if self.action.update(ctx):
+                entered = bool(getattr(self.action, "entered_lane", True))
+                self.manoeuvre_ok = entered
                 self.log_event(ctx.sim_time, "CUT_IN_COMPLETED", {
                     "gap_m": round(longitudinal_gap(ctx.ego, ctx.npc), 2)
                     if ctx.npc else None,
+                    "entered_ego_lane": entered,
+                    "lateral_m": round(lateral_offset(ctx.ego, ctx.npc), 2)
+                    if ctx.npc else None,
                 })
+                if not entered:
+                    # Loud, because an episode where the manoeuvre did not
+                    # happen must not be read as the model handling it.
+                    self.log_event(ctx.sim_time, "SCENARIO_MANOEUVRE_FAILED", {
+                        "reason": "scenario vehicle never entered the ego lane",
+                    })
 
     def npc_state(self, ego: carla.Vehicle) -> dict[str, Any]:
         if self.npc is None:

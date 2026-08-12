@@ -24,7 +24,8 @@ from model_gateway.protocol import driving_pb2 as pb
 from model_gateway.protocol import driving_pb2_grpc as pb_grpc
 from simulator.policy import DrivingPolicy
 from simulator.types import (
-    Observation, TrajectoryAction, TrajectoryPoint, VehicleControlAction,
+    HighLevelDecision, Observation, TrajectoryAction, TrajectoryPoint,
+    VehicleControlAction,
 )
 
 
@@ -109,7 +110,14 @@ class RemoteModelAdapter(DrivingPolicy):
                 ) from exc
             raise
 
-        if response.WhichOneof("action") == "trajectory":
+        kind = response.WhichOneof("action")
+        if kind == "decision":
+            return HighLevelDecision(
+                decision=response.decision.decision,
+                reason=response.decision.reason,
+                confidence=response.decision.confidence or None,
+            )
+        if kind == "trajectory":
             return TrajectoryAction(waypoints=[
                 TrajectoryPoint(
                     x=p.x, y=p.y,

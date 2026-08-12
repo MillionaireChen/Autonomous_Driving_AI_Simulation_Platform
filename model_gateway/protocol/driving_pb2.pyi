@@ -12,9 +12,11 @@ class ModelType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     MODEL_TYPE_UNSPECIFIED: _ClassVar[ModelType]
     CONTROL_POLICY: _ClassVar[ModelType]
     TRAJECTORY_POLICY: _ClassVar[ModelType]
+    HIGH_LEVEL_POLICY: _ClassVar[ModelType]
 MODEL_TYPE_UNSPECIFIED: ModelType
 CONTROL_POLICY: ModelType
 TRAJECTORY_POLICY: ModelType
+HIGH_LEVEL_POLICY: ModelType
 
 class HealthCheckRequest(_message.Message):
     __slots__ = ()
@@ -170,10 +172,22 @@ class Trajectory(_message.Message):
     waypoints: _containers.RepeatedCompositeFieldContainer[TrajectoryPoint]
     def __init__(self, waypoints: _Optional[_Iterable[_Union[TrajectoryPoint, _Mapping]]] = ...) -> None: ...
 
+class Decision(_message.Message):
+    __slots__ = ("decision", "reason", "confidence")
+    DECISION_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    CONFIDENCE_FIELD_NUMBER: _ClassVar[int]
+    decision: str
+    reason: str
+    confidence: float
+    def __init__(self, decision: _Optional[str] = ..., reason: _Optional[str] = ..., confidence: _Optional[float] = ...) -> None: ...
+
 class InferResponse(_message.Message):
-    __slots__ = ("control", "trajectory")
+    __slots__ = ("control", "trajectory", "decision")
     CONTROL_FIELD_NUMBER: _ClassVar[int]
     TRAJECTORY_FIELD_NUMBER: _ClassVar[int]
+    DECISION_FIELD_NUMBER: _ClassVar[int]
     control: VehicleControl
     trajectory: Trajectory
-    def __init__(self, control: _Optional[_Union[VehicleControl, _Mapping]] = ..., trajectory: _Optional[_Union[Trajectory, _Mapping]] = ...) -> None: ...
+    decision: Decision
+    def __init__(self, control: _Optional[_Union[VehicleControl, _Mapping]] = ..., trajectory: _Optional[_Union[Trajectory, _Mapping]] = ..., decision: _Optional[_Union[Decision, _Mapping]] = ...) -> None: ...

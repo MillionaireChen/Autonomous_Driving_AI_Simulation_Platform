@@ -32,6 +32,7 @@ from PIL import Image as PILImage
 
 from simulator import carla_client, ego as ego_mod
 from simulator.control import TrajectoryController
+from simulator.lowlevel import DecisionExecutor
 from simulator.metrics import EvaluationEngine
 from simulator.policy import DrivingPolicy
 from simulator.route import build_route
@@ -45,6 +46,7 @@ from simulator.scenario import (
 from simulator.sensors import CameraSensor, CollisionSensor, LaneInvasionSensor
 from simulator.types import (
     EpisodeResult,
+    HighLevelDecision,
     LeadVehicle,
     Observation,
     TrajectoryAction,
@@ -214,6 +216,9 @@ class SimulationWorker:
         final_pose = None
         runner = ScenarioRunner(scenario) if scenario else None
         trajectory_controller = TrajectoryController()
+        # Executes semantic decisions with a conventional controller
+        # (spec section 14). Only used if a model actually answers with one.
+        decision_executor = DecisionExecutor()
         engine = (
             EvaluationEngine(self.evaluation_config) if self.evaluation_config else None
         )
@@ -260,6 +265,10 @@ class SimulationWorker:
                     # Give the scenario actors a tick to become real too.
                     world.tick()
 
+                decision_executor.reset(
+                    fixed_delta_seconds=self.fixed_delta,
+                    target_speed_mps=target_speed,
+                )
                 policy.reset({
                     "episode_id": episode_id,
                     "fixed_delta_seconds": self.fixed_delta,
@@ -273,6 +282,8 @@ class SimulationWorker:
                 last_frame_sent = -1
                 last_event_sent = 0
                 jpeg = None
+                decision_active = False
+                last_decision = None
                 route_command = self.episode_config.get("route_command")
                 terminate_on_collision = bool(
                     scenario.termination.get("collision", True)
@@ -314,6 +325,27 @@ class SimulationWorker:
                         latencies.append((time.perf_counter() - started) * 1000.0)
                         result.inferences += 1
 
+                        # A model may answer with a semantic manoeuvre instead
+                        # of pedals (spec section 14). The decision is *held*
+                        # until the next inference while the controller keeps
+                        # running every tick - which is the only way a 100 ms
+                        # model can drive a 20 Hz loop.
+                        if isinstance(proposed, HighLevelDecision):
+                            if decision_executor.set_decision(proposed):
+                                if runner is not None and \
+                                        proposed.decision != last_decision:
+                                    runner.log_event(sim_time, "DECISION", {
+                                        "decision": proposed.decision,
+                                        "reason": proposed.reason[:120],
+                                    })
+                                last_decision = proposed.decision
+                                proposed = None  # controller drives from here
+                            else:
+                                # An unknown word is a rejected action.
+                                proposed = None
+                                result.invalid_actions += 1
+                            decision_active = True
+
                         # A model may answer with waypoints instead of pedals
                         # (spec sections 13/14). Converting here means the
                         # model never learns anything about this vehicle, and
@@ -327,10 +359,19 @@ class SimulationWorker:
                                 proposed = None
 
                         # The simulator, not the model, decides what is legal.
+                        if decision_active:
+                            proposed = decision_executor.control(obs)
                         if proposed is None or not proposed.is_finite():
                             proposed = safety_fallback(action.steer)
                             result.invalid_actions += 1
                         action = proposed.clamped()
+                    elif decision_active:
+                        # Between inferences: re-run the controller under the
+                        # standing decision rather than reapplying a stale pedal
+                        # position.
+                        candidate = decision_executor.control(obs)
+                        if candidate.is_finite():
+                            action = candidate.clamped()
 
                     vehicle.apply_control(carla.VehicleControl(
                         throttle=action.throttle,
@@ -389,6 +430,8 @@ class SimulationWorker:
                             ttc_s=ttc,
                         )
                         row["ttc_s"] = round(ttc, 3) if ttc is not None else None
+                    if decision_active:
+                        row["decision"] = decision_executor.decision
                     if route is not None:
                         row["route_pct"] = round(
                             route.completion_percent(pose.x, pose.y), 2
@@ -470,6 +513,7 @@ class SimulationWorker:
                 if runner is not None:
                     result.scenario_triggered = runner.triggered
                     result.scenario_triggered_at = runner.triggered_at
+                    result.scenario_manoeuvre_ok = runner.manoeuvre_ok
                     result.events = runner.events
 
             finally:
@@ -488,6 +532,8 @@ class SimulationWorker:
         result.inference_latency_ms_p95 = percentile(latencies, 95)
         # Remote adapters track deadline misses; in-process policies have none.
         result.model_timeouts = int(getattr(policy, "timeouts", 0))
+        if decision_active:
+            result.decision_counts = dict(decision_executor.counts)
 
         metrics = None
         if engine is not None and final_pose is not None:
