@@ -8,6 +8,7 @@ that results can point at with a foreign key.
 
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -45,6 +46,7 @@ def sync_registries() -> tuple[int, int]:
                     row.endpoint = entry["endpoint"]
                     row.timeout_ms = int(entry.get("timeout_ms", 500))
                     row.gpu = entry.get("gpu")
+                    row.display_order = int(entry.get("display_order", 100))
                     db.merge(row)
                     models += 1
 
@@ -91,9 +93,14 @@ app.include_router(ws_router)
 # The dashboard is served from a different origin during development.
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
+# The dashboard runs on a different origin, and on a different host when the
+# demo is watched from another machine. ARENA_CORS_ORIGINS is a comma-separated
+# list; the loopback origins are always allowed.
+_extra = [o.strip() for o in os.environ.get("ARENA_CORS_ORIGINS", "").split(",")
+          if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", *_extra],
     allow_methods=["*"],
     allow_headers=["*"],
 )

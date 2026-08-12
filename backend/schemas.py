@@ -17,6 +17,7 @@ class ModelOut(BaseModel):
     endpoint: str
     timeout_ms: int
     gpu: Optional[int] = None
+    display_order: int = 100
 
 
 class ModelIn(BaseModel):
@@ -28,6 +29,7 @@ class ModelIn(BaseModel):
     type: str = "CONTROL_POLICY"
     timeout_ms: int = 500
     gpu: Optional[int] = None
+    display_order: int = 100
 
 
 class ModelHealth(BaseModel):

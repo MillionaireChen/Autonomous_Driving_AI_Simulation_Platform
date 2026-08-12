@@ -46,4 +46,18 @@ ln -s "$STAGE/node_modules" frontend/node_modules
 # Bring the refreshed lockfile back so it can be committed.
 [[ -f "$STAGE/package-lock.json" ]] && cp "$STAGE/package-lock.json" frontend/
 
-echo "[fe-install] done: frontend/node_modules -> $STAGE/node_modules"
+# Same trick for the build output. next.config.mjs must keep distDir as a
+# project-relative ".next", because Next resolves it against the project
+# directory - an absolute path lands inside the repo rather than escaping it.
+# So point .next at local disk with a symlink instead. Unlike npm install,
+# `next build` writes through an existing symlink, so this survives.
+BUILD_DIR="${ARENA_NEXT_BUILD:-/var/tmp/fls/adarena/next-build}"
+mkdir -p "$BUILD_DIR"
+if [[ ! -L frontend/.next ]]; then
+    rm -rf frontend/.next
+    ln -s "$BUILD_DIR" frontend/.next
+fi
+
+echo "[fe-install] done:"
+echo "  frontend/node_modules -> $STAGE/node_modules"
+echo "  frontend/.next        -> $BUILD_DIR"

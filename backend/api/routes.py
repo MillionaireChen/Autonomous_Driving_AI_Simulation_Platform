@@ -42,7 +42,7 @@ def manager(request: Request):
 # --- models --------------------------------------------------------------
 @router.get("/models", response_model=list[ModelOut], tags=["models"])
 def list_models(db: Session = Depends(get_session)):
-    return db.query(Model).order_by(Model.id).all()
+    return db.query(Model).order_by(Model.display_order, Model.id).all()
 
 
 @router.post("/models", response_model=ModelOut, status_code=201, tags=["models"])

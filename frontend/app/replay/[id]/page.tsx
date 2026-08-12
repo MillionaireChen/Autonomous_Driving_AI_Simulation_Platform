@@ -9,6 +9,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import BirdEyeView from "../../../components/BirdEyeView";
+import ActionBars from "../../../components/ActionBars";
 import { API_BASE, type Tick } from "../../../lib/api";
 
 type Replay = {
@@ -200,30 +201,11 @@ export default function ReplayPage({
 
         <div className="panel">
           <div className="label">ACTION</div>
-          {(
-            [
-              ["THROTTLE", tick?.throttle ?? 0, "var(--good)", 0, 1],
-              ["BRAKE", tick?.brake ?? 0, "var(--bad)", 0, 1],
-              ["STEER", tick?.steer ?? 0, "var(--accent)", -1, 1],
-            ] as [string, number, string, number, number][]
-          ).map(([name, value, colour, min, max]) => (
-            <div key={name} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span className="muted" style={{ fontSize: 11 }}>
-                  {name}
-                </span>
-                <span style={{ fontSize: 12 }}>{value.toFixed(2)}</span>
-              </div>
-              <div className="bar">
-                <div
-                  style={{
-                    width: `${((value - min) / (max - min)) * 100}%`,
-                    background: colour,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
+          <ActionBars
+            throttle={tick?.throttle}
+            brake={tick?.brake}
+            steer={tick?.steer}
+          />
 
           <div style={{ marginTop: 20, fontSize: 12, lineHeight: 1.8 }}>
             <div className="label">SCENARIO VEHICLE</div>

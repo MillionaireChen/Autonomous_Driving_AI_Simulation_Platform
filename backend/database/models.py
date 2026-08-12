@@ -40,6 +40,8 @@ class Model(Base):
     endpoint: Mapped[str] = mapped_column(String(128))
     timeout_ms: Mapped[int] = mapped_column(Integer, default=500)
     gpu: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Order in the dashboard list; the first entry is selected by default.
+    display_order: Mapped[int] = mapped_column(Integer, default=100)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     experiments: Mapped[list["Experiment"]] = relationship(back_populates="model")

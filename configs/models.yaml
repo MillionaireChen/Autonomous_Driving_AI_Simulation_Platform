@@ -13,12 +13,18 @@ models:
     endpoint: localhost:51001
     # Milliseconds before an inference counts as a timeout (spec section 50).
     timeout_ms: 500
+    # Order in the dashboard's model list. Lower comes first, and the first
+    # entry is what a fresh page has selected - so it should be a model that
+    # can actually drive. Sorting by id put cnn_il first, which fails the
+    # scenario, and made the default experience a crash.
+    display_order: 30
 
   - id: pid
     name: PID Lane Follower
     type: CONTROL_POLICY
     endpoint: localhost:51002
     timeout_ms: 500
+    display_order: 10
 
   - id: cnn_il
     name: CNN Imitation Learning
@@ -27,3 +33,4 @@ models:
     timeout_ms: 500
     # Inference runs on the same card as CARLA; both fit comfortably.
     gpu: 0
+    display_order: 20
