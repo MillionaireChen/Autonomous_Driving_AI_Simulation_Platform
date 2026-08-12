@@ -30,3 +30,4 @@ frontend/next-env.d.ts
 # Trained weights and collected data are regenerated, not versioned
 models/il/checkpoints/
 dataset/
+frontend/var/
