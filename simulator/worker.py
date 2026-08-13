@@ -66,12 +66,17 @@ class SimulationWorker:
         ego_config: dict[str, Any],
         episode_config: dict[str, Any],
         evaluation_config: Optional[dict[str, Any]] = None,
+        camera_rig: Optional[dict[str, dict[str, Any]]] = None,
     ) -> None:
         self.sim_config = sim_config
         self.camera_config = camera_config
         self.ego_config = ego_config
         self.episode_config = episode_config
         self.evaluation_config = evaluation_config
+        #: Extra named cameras, mounted only when a model asked for a rig.
+        #: They cost render time on every tick, so an episode that does not
+        #: need them does not pay for them.
+        self.camera_rig = camera_rig or {}
 
         self.fixed_delta = float(sim_config["world"]["fixed_delta_seconds"])
         self.sim_hz = 1.0 / self.fixed_delta
@@ -89,9 +94,15 @@ class SimulationWorker:
         route_command: Optional[str],
         route=None,
         others: Optional[list] = None,
+        rig: Optional[dict[str, CameraSensor]] = None,
     ) -> Observation:
         control = vehicle.get_control()
         pose = ego_mod.pose_of(vehicle)
+        rig_frames = {}
+        for name, sensor in (rig or {}).items():
+            frame = sensor.poll()
+            if frame is not None:
+                rig_frames[name] = frame
         return Observation(
             frame_id=frame_id,
             timestamp=sim_time,
@@ -100,6 +111,7 @@ class SimulationWorker:
             steering_angle=control.steer,
             ego_pose=pose,
             rgb_front=camera.poll() if camera else None,
+            cameras=rig_frames,
             route_command=route_command,
             route_waypoints=route.upcoming(pose.x, pose.y) if route else [],
             lead_vehicle=self._lead_vehicle(vehicle, others or []),
@@ -210,6 +222,7 @@ class SimulationWorker:
 
         vehicle = None
         camera = None
+        rig: dict[str, CameraSensor] = {}
         collision = None
         lane_invasion = None
         route = None
@@ -233,6 +246,10 @@ class SimulationWorker:
                     world, self.ego_config, spawn_index=spawn_index
                 )
                 camera = CameraSensor(world, vehicle, self.camera_config)
+                rig = {
+                    name: CameraSensor(world, vehicle, spec)
+                    for name, spec in self.camera_rig.items()
+                }
                 collision = CollisionSensor(world, vehicle)
                 lane_invasion = LaneInvasionSensor(world, vehicle)
 
@@ -312,6 +329,7 @@ class SimulationWorker:
                         vehicle, camera, tick, sim_time, route_command,
                         route=route,
                         others=runner.actors() if runner is not None else [],
+                        rig=rig,
                     )
 
                     # Ask the policy only at its own rate; reuse in between.
@@ -521,6 +539,7 @@ class SimulationWorker:
                 extra = runner.actors() if runner is not None else []
                 carla_client.destroy_actors(
                     [camera.actor if camera else None,
+                     *(sensor.actor for sensor in rig.values()),
                      collision.actor if collision else None,
                      lane_invasion.actor if lane_invasion else None,
                      vehicle, *extra]

@@ -113,7 +113,14 @@ class LeadVehicle(_message.Message):
     def __init__(self, gap_m: _Optional[float] = ..., speed_mps: _Optional[float] = ...) -> None: ...
 
 class Observation(_message.Message):
-    __slots__ = ("frame_id", "timestamp", "speed_mps", "acceleration_mps2", "steering_angle", "ego_pose", "rgb_front", "route_command", "route_waypoints", "lead_vehicle")
+    __slots__ = ("frame_id", "timestamp", "speed_mps", "acceleration_mps2", "steering_angle", "ego_pose", "rgb_front", "route_command", "route_waypoints", "lead_vehicle", "cameras")
+    class CamerasEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: Image
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[Image, _Mapping]] = ...) -> None: ...
     FRAME_ID_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     SPEED_MPS_FIELD_NUMBER: _ClassVar[int]
@@ -124,6 +131,7 @@ class Observation(_message.Message):
     ROUTE_COMMAND_FIELD_NUMBER: _ClassVar[int]
     ROUTE_WAYPOINTS_FIELD_NUMBER: _ClassVar[int]
     LEAD_VEHICLE_FIELD_NUMBER: _ClassVar[int]
+    CAMERAS_FIELD_NUMBER: _ClassVar[int]
     frame_id: int
     timestamp: float
     speed_mps: float
@@ -134,7 +142,8 @@ class Observation(_message.Message):
     route_command: str
     route_waypoints: _containers.RepeatedCompositeFieldContainer[Waypoint]
     lead_vehicle: LeadVehicle
-    def __init__(self, frame_id: _Optional[int] = ..., timestamp: _Optional[float] = ..., speed_mps: _Optional[float] = ..., acceleration_mps2: _Optional[float] = ..., steering_angle: _Optional[float] = ..., ego_pose: _Optional[_Union[Pose, _Mapping]] = ..., rgb_front: _Optional[_Union[Image, _Mapping]] = ..., route_command: _Optional[str] = ..., route_waypoints: _Optional[_Iterable[_Union[Waypoint, _Mapping]]] = ..., lead_vehicle: _Optional[_Union[LeadVehicle, _Mapping]] = ...) -> None: ...
+    cameras: _containers.MessageMap[str, Image]
+    def __init__(self, frame_id: _Optional[int] = ..., timestamp: _Optional[float] = ..., speed_mps: _Optional[float] = ..., acceleration_mps2: _Optional[float] = ..., steering_angle: _Optional[float] = ..., ego_pose: _Optional[_Union[Pose, _Mapping]] = ..., rgb_front: _Optional[_Union[Image, _Mapping]] = ..., route_command: _Optional[str] = ..., route_waypoints: _Optional[_Iterable[_Union[Waypoint, _Mapping]]] = ..., lead_vehicle: _Optional[_Union[LeadVehicle, _Mapping]] = ..., cameras: _Optional[_Mapping[str, Image]] = ...) -> None: ...
 
 class VehicleControl(_message.Message):
     __slots__ = ("throttle", "steer", "brake", "hand_brake")

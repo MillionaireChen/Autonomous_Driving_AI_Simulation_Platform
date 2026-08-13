@@ -229,9 +229,14 @@ class ExperimentManager:
 
                 self.set_status(db, experiment, "RUNNING")
 
+                # The model has told us which views it needs, so mount those
+                # and nothing else. Resolved here rather than from a column on
+                # the model row: the service is the authority on its own
+                # inputs, and asking it cannot go stale.
                 worker = SimulationWorker(
                     sim_config, camera_config, ego_config, episode_config,
                     evaluation_config=evaluation_config,
+                    camera_rig=cfg.resolve_camera_rig(policy.required_sensors),
                 )
                 output_dir = self.output_root / experiment.id
                 stream = self.streams.get(experiment_id)

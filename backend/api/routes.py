@@ -42,7 +42,18 @@ def manager(request: Request):
 # --- models --------------------------------------------------------------
 @router.get("/models", response_model=list[ModelOut], tags=["models"])
 def list_models(db: Session = Depends(get_session)):
-    return db.query(Model).order_by(Model.display_order, Model.id).all()
+    """Models a run can actually be started against.
+
+    Retired models are held back: their rows survive so their past results
+    still resolve, but offering them would only produce runs that fail at
+    connect time.
+    """
+    return (
+        db.query(Model)
+        .filter(Model.archived.is_(False))
+        .order_by(Model.display_order, Model.id)
+        .all()
+    )
 
 
 @router.post("/models", response_model=ModelOut, status_code=201, tags=["models"])

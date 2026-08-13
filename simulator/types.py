@@ -60,6 +60,13 @@ class Observation:
     steering_angle: float
     ego_pose: Pose
     rgb_front: Optional[np.ndarray] = None
+    #: Additional named cameras, for models that need more than the front view.
+    #: Kept separate from `rgb_front` so the single-camera path - and every
+    #: model built on it - stays exactly as it was. A model asks for these by
+    #: naming them in `required_sensors`; nothing is sent that was not asked
+    #: for. The simulator publishes raw frames and does no stitching: which
+    #: crops a model wants, and how it composes them, is the model's business.
+    cameras: dict[str, np.ndarray] = field(default_factory=dict)
     route_command: Optional[str] = None
     #: Upcoming route points in world coordinates, nearest first. Every real
     #: driving stack is given a route; inferring where to go from pixels alone

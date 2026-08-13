@@ -20,6 +20,7 @@ from typing import Any, Optional
 import grpc
 import numpy as np
 
+from model_gateway import MESSAGE_SIZE_OPTIONS
 from model_gateway.protocol import driving_pb2 as pb
 from model_gateway.protocol import driving_pb2_grpc as pb_grpc
 from simulator.policy import DrivingPolicy
@@ -68,7 +69,7 @@ class RemoteModelAdapter(DrivingPolicy):
         #: often the model missed its budget (spec section 50).
         self.timeouts = 0
 
-        self._channel = grpc.insecure_channel(endpoint)
+        self._channel = grpc.insecure_channel(endpoint, options=MESSAGE_SIZE_OPTIONS)
         try:
             grpc.channel_ready_future(self._channel).result(timeout=connect_timeout_s)
         except grpc.FutureTimeoutError as exc:
@@ -166,6 +167,13 @@ class RemoteModelAdapter(DrivingPolicy):
         if "lead_vehicle" in self.required_sensors and obs.lead_vehicle is not None:
             msg.lead_vehicle.gap_m = obs.lead_vehicle.gap_m
             msg.lead_vehicle.speed_mps = obs.lead_vehicle.speed_mps
+        # Extra cameras go by name, and only the ones asked for. A wide rig is
+        # far too big for the default 4 MB gRPC frame as raw bytes - three
+        # 1600x900 views are 13 MB - so these are always JPEG regardless of
+        # `image_encoding`, which only governs the front camera.
+        for name, frame in obs.cameras.items():
+            if name in self.required_sensors and frame is not None:
+                msg.cameras[name].CopyFrom(encode_image(frame, "jpeg"))
         return msg
 
     def health_check(self) -> bool:

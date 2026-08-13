@@ -5,43 +5,39 @@
 #
 # gpu is advisory metadata for whoever launches the service - the simulator
 # never places models on devices itself.
+#
+# Removing an entry from this file retires the model: the sync marks its row
+# archived, so it disappears from the dashboard while its past experiments
+# still resolve. It does not delete anything.
+#
+# dummy, pid and cnn_il were retired here in v2.0. A constant-throttle agent, a
+# hand-tuned controller and a 23k-sample behaviour-cloning CNN measured the
+# platform rather than the state of the art; the arena is for published models
+# now. `models/pid/` stays on disk because scripts/collect_dataset.py uses
+# PIDAgent as its expert.
 
 models:
-  - id: dummy
-    name: Dummy Constant Control
+  - id: tcp
+    name: TCP (Bench2Drive)
+    # Trajectory-guided Control Prediction, NeurIPS 2022. The checkpoint is
+    # the Bench2Drive student of the Think2Drive RL teacher, unmodified.
     type: CONTROL_POLICY
-    endpoint: localhost:51001
-    # Milliseconds before an inference counts as a timeout (spec section 50).
+    endpoint: localhost:51005
+    # ~150 ms per inference measured on GPU 3, so 500 ms is comfortable.
     timeout_ms: 500
+    gpu: 3
     # Order in the dashboard's model list. Lower comes first, and the first
     # entry is what a fresh page has selected - so it should be a model that
-    # can actually drive. Sorting by id put cnn_il first, which fails the
-    # scenario, and made the default experience a crash.
-    display_order: 30
-
-  - id: pid
-    name: PID Lane Follower
-    type: CONTROL_POLICY
-    endpoint: localhost:51002
-    timeout_ms: 500
-    display_order: 10
-
-  - id: cnn_il
-    name: CNN Imitation Learning
-    type: CONTROL_POLICY
-    endpoint: localhost:51003
-    timeout_ms: 500
-    # Inference runs on the same card as CARLA; both fit comfortably.
-    gpu: 0
-    display_order: 20
+    # can actually drive.
+    display_order: 1
 
   - id: vlm
     name: VLM Decision (zero-shot)
     # High-level manoeuvres, executed by the simulator's controller (spec 14).
     type: HIGH_LEVEL_POLICY
     endpoint: localhost:51004
-    # A decision takes ~100 ms; the budget is generous because the controller
-    # keeps driving between inferences rather than waiting.
+    # A decision takes ~100 ms alone, but ~420 ms when it shares GPU 3 with
+    # another model, so the budget stays generous.
     timeout_ms: 800
-    gpu: 1
+    gpu: 3
     display_order: 5

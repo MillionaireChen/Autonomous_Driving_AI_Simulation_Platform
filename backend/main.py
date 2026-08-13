@@ -39,6 +39,7 @@ def sync_registries() -> tuple[int, int]:
     with sessions() as db:
         if MODELS_YAML.exists():
             with MODELS_YAML.open() as fh:
+                registered = set()
                 for entry in (yaml.safe_load(fh) or {}).get("models", []):
                     row = db.get(Model, entry["id"]) or Model(id=entry["id"])
                     row.name = entry.get("name", entry["id"])
@@ -47,8 +48,17 @@ def sync_registries() -> tuple[int, int]:
                     row.timeout_ms = int(entry.get("timeout_ms", 500))
                     row.gpu = entry.get("gpu")
                     row.display_order = int(entry.get("display_order", 100))
+                    row.archived = False
                     db.merge(row)
+                    registered.add(entry["id"])
                     models += 1
+
+                # Anything the YAML no longer lists is retired, not deleted:
+                # its experiments still point at it. Without this the registry
+                # only ever grew, and the dashboard went on offering models
+                # whose services had been shut down for good.
+                for row in db.query(Model).filter(Model.id.notin_(registered)):
+                    row.archived = True
 
         for path in sorted(SCENARIO_DIR.glob("*.yaml")):
             with path.open() as fh:

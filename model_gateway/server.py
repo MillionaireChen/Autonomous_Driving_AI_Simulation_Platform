@@ -19,6 +19,7 @@ from typing import Optional
 import grpc
 import numpy as np
 
+from model_gateway import MESSAGE_SIZE_OPTIONS
 from model_gateway.protocol import driving_pb2 as pb
 from model_gateway.protocol import driving_pb2_grpc as pb_grpc
 from simulator.policy import DrivingPolicy
@@ -56,6 +57,11 @@ def observation_from_proto(msg: pb.Observation) -> Observation:
             roll=msg.ego_pose.roll, pitch=msg.ego_pose.pitch, yaw=msg.ego_pose.yaw,
         ),
         rgb_front=decode_image(msg.rgb_front) if msg.HasField("rgb_front") else None,
+        cameras={
+            name: frame
+            for name, image in msg.cameras.items()
+            if (frame := decode_image(image)) is not None
+        },
         route_command=msg.route_command or None,
         route_waypoints=[(w.x, w.y) for w in msg.route_waypoints],
         lead_vehicle=(
@@ -148,7 +154,10 @@ def serve(
     max_workers: int = 4,
 ) -> None:
     """Run the model service until interrupted."""
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=max_workers),
+        options=MESSAGE_SIZE_OPTIONS,
+    )
     pb_grpc.add_DrivingModelServicer_to_server(
         DrivingModelServicer(policy, model_id, model_name, version), server
     )

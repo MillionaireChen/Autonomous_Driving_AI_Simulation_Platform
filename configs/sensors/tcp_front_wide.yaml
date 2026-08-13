@@ -1,0 +1,57 @@
+# Three forward-facing cameras, as TCP expects them (Bench2Drive rig).
+#
+# TCP does not take a single front view. Its agent crops these three and
+# concatenates them into one wide 256x900 image, so the geometry here is not
+# ours to choose: the numbers are copied from the Bench2Drive agent and must
+# match, or the model sees a world it was never trained on.
+#
+# No intrinsics or extrinsics are published with these. TCP only stitches the
+# pixels side by side, it never projects between frames, so it needs nothing
+# beyond the images themselves. UniAD and VAD do project, and will need a
+# calibrated rig that this file deliberately does not pretend to be.
+#
+# The stitching itself belongs to the model service, not here: which crop a
+# model wants is a property of the model.
+
+cameras:
+  cam_front:
+    type: rgb
+    width: 1600
+    height: 900
+    fov: 70
+    sensor_tick: 0.1
+    transform:
+      x: 0.80
+      y: 0.0
+      z: 1.60
+      pitch: 0.0
+      yaw: 0.0
+      roll: 0.0
+
+  cam_front_left:
+    type: rgb
+    width: 1600
+    height: 900
+    fov: 70
+    sensor_tick: 0.1
+    transform:
+      x: 0.27
+      y: -0.55
+      z: 1.60
+      pitch: 0.0
+      yaw: -55.0
+      roll: 0.0
+
+  cam_front_right:
+    type: rgb
+    width: 1600
+    height: 900
+    fov: 70
+    sensor_tick: 0.1
+    transform:
+      x: 0.27
+      y: 0.55
+      z: 1.60
+      pitch: 0.0
+      yaw: 55.0
+      roll: 0.0

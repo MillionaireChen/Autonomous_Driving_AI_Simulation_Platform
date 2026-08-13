@@ -107,6 +107,12 @@ message Observation {
   // "route": every real driving stack is given a route.
   repeated Waypoint route_waypoints = 9;
   LeadVehicle lead_vehicle = 10;
+  // Named cameras beyond the front view, for models that need a wider rig.
+  // A map rather than more Image fields because the set of cameras is a
+  // property of the model, not of the protocol: adding a rig must not mean
+  // editing this file again. Keyed by sensor name ("cam_front_left", ...),
+  // and only the ones a model declared are ever populated.
+  map<string, Image> cameras = 11;
 }
 
 message VehicleControl {

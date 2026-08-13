@@ -42,6 +42,11 @@ class Model(Base):
     gpu: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: Order in the dashboard list; the first entry is selected by default.
     display_order: Mapped[int] = mapped_column(Integer, default=100)
+    #: Retired from the registry but kept as a row. Experiments carry a
+    #: foreign key to their model, so deleting a retired one would mean
+    #: deleting its results too - the evaluation history is the thing this
+    #: project exists to accumulate, so the row stays and stops being offered.
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     experiments: Mapped[list["Experiment"]] = relationship(back_populates="model")

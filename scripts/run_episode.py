@@ -96,8 +96,10 @@ def main() -> int:
             scenario.duration_seconds = args.duration
 
     evaluation_config = None if args.no_eval else cfg.load_yaml("evaluation.yaml")
+    camera_rig = cfg.resolve_camera_rig(policy.required_sensors)
     worker = SimulationWorker(sim_config, camera_config, ego_config, episode_config,
-                              evaluation_config=evaluation_config)
+                              evaluation_config=evaluation_config,
+                              camera_rig=camera_rig)
 
     duration = scenario.duration_seconds if scenario else episode_config["duration_seconds"]
     print(f"episode {args.episode_id}: policy={policy.name} ({source_label}) "
@@ -107,6 +109,8 @@ def main() -> int:
         print(f"scenario {scenario.id} ({scenario.name}) map={scenario.map} seed={scenario.seed}")
     if policy.required_sensors:
         print(f"model requires sensors: {', '.join(policy.required_sensors)}")
+    if camera_rig:
+        print(f"extra cameras mounted: {', '.join(sorted(camera_rig))}")
 
     result = worker.run_episode(policy, episode_id=args.episode_id,
                                 output_dir=output_dir, scenario=scenario)
